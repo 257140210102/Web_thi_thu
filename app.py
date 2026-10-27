@@ -680,7 +680,12 @@ st.markdown(
     div[role="radiogroup"] label p, label p { font-family: 'Arial', sans-serif !important; font-size: 17px !important; color: #2b2b2b !important; }
     textarea, input[type="text"] { font-family: 'Arial', sans-serif !important; font-size: 17px !important; }
     
-    /* Cấu hình khung đăng nhập chuẩn không vỡ dòng chữ */
+    /* ẨN POPUP MẬT KHẨU BẰNG CÁCH MÃ HÓA Ô NHẬP TỰ ĐỘNG THÀNH DẤU CHẤM */
+    div[data-testid="stTextInput"] input[aria-label*="Mật khẩu"] {
+        -webkit-text-security: disc !important;
+    }
+
+    /* Cấu hình khung đăng nhập chuẩn đẹp */
     .login-box { 
         background-color: #ffffff; 
         padding: 35px 30px; 
@@ -704,8 +709,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# JavaScript ngăn trình duyệt gợi ý "Mật khẩu mạnh" (Set current-password)
-inactivity_and_autocomplete_js = """
+# JavaScript tự động đăng xuất sau 5 phút không thao tác
+inactivity_js = """
 <script>
 (function() {
     var timer;
@@ -720,22 +725,10 @@ inactivity_and_autocomplete_js = """
         window.parent.document.onscroll = resetTimer;
         resetTimer();
     } catch(e) {}
-
-    setInterval(function() {
-        try {
-            var passInputs = window.parent.document.querySelectorAll('input[type="password"]');
-            passInputs.forEach(function(inp) {
-                inp.setAttribute('autocomplete', 'current-password');
-                inp.setAttribute('aria-autocomplete', 'list');
-                inp.setAttribute('autocorrect', 'off');
-                inp.setAttribute('spellcheck', 'false');
-            });
-        } catch(e) {}
-    }, 300);
 })();
 </script>
 """
-components.html(inactivity_and_autocomplete_js, height=0, width=0)
+components.html(inactivity_js, height=0, width=0)
 
 users_db = load_users()
 exams_db = load_exams()
@@ -774,7 +767,9 @@ if not st.session_state.user_session:
     )
 
     username_input = st.text_input('Mã học sinh / Tên đăng nhập:')
-    password_input = st.text_input('Mật khẩu:', type='password')
+
+    # Bỏ type='password' để triệt tiêu popup gợi ý mật khẩu mạnh của Chrome, sử dụng CSS -webkit-text-security thay thế
+    password_input = st.text_input('Mật khẩu:')
 
     if st.button('🚀 Đăng Nhập', use_container_width=True):
       if username_input in users_db:
@@ -816,8 +811,8 @@ if not st.session_state.user_session:
           st.error('❌ Thông tin đăng ký không chính xác!')
 
       if st.session_state.get('reset_user'):
-        new_pass = st.text_input('Nhập mật khẩu mới:', type='password')
-        confirm_pass = st.text_input('Nhập lại mật khẩu mới:', type='password')
+        new_pass = st.text_input('Nhập mật khẩu mới:')
+        confirm_pass = st.text_input('Nhập lại mật khẩu mới:')
         if st.button('✅ Đổi Mật Khẩu'):
           if new_pass != confirm_pass:
             st.error('❌ Mật khẩu xác nhận không khớp!')
@@ -855,9 +850,9 @@ with head_col2:
 
     with st.expander('🔑 Đổi Mật Khẩu'):
       with st.form(key=f"form_change_pass_{user['username']}"):
-        old_p = st.text_input('Mật khẩu cũ:', type='password')
-        new_p = st.text_input('Mật khẩu mới:', type='password')
-        confirm_p = st.text_input('Nhập lại mật khẩu mới:', type='password')
+        old_p = st.text_input('Mật khẩu cũ:')
+        new_p = st.text_input('Mật khẩu mới:')
+        confirm_p = st.text_input('Nhập lại mật khẩu mới:')
         sub_pass = st.form_submit_button('💾 Lưu Mật Khẩu Mới')
 
         if sub_pass:
@@ -1796,7 +1791,7 @@ if user['role'] in ['teacher', 'admin']:
               )
 
               if hs_id and hs_id != 'nan' and hs_name and hs_name != 'nan':
-                # Nếu đã có tài khoản thì giữ nguyên mật khẩu học sinh đã đổi, chưa có thì gán 123
+                # Giữ nguyên mật khẩu đã đổi của học sinh nếu đã có tài khoản
                 existing_pass = users_db.get(hs_id, {}).get('password', '123')
                 users_db[hs_id] = {
                     'name': hs_name,
@@ -2616,7 +2611,7 @@ elif user['role'] == 'student':
       key_essay = f'essay_{idx}'
       if is_short_ans_subj:
         user_essay[idx] = st.text_input(
-            'Nhập đáp án:', key=key_essay
+            'Nhập đáp án (VD: 4.5 hoặc 4,5):', key=key_essay
         )
       else:
         user_essay[idx] = st.text_area('Bài làm:', key=key_essay, height=120)
