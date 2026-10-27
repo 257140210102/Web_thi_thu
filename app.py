@@ -679,13 +679,32 @@ st.markdown(
     div[id^="q_"] { scroll-margin-top: 70px !important; display: block; }
     div[role="radiogroup"] label p, label p { font-family: 'Arial', sans-serif !important; font-size: 17px !important; color: #2b2b2b !important; }
     textarea, input[type="text"] { font-family: 'Arial', sans-serif !important; font-size: 17px !important; }
-    .login-box { background-color: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0px 4px 15px rgba(0,0,0,0.1); margin: 50px auto; max-width: 450px; }
+    
+    /* Cấu hình khung đăng nhập chuẩn không vỡ dòng chữ */
+    .login-box { 
+        background-color: #ffffff; 
+        padding: 35px 30px; 
+        border-radius: 14px; 
+        box-shadow: 0px 4px 20px rgba(0,0,0,0.12); 
+        margin: 40px auto; 
+        max-width: 500px;
+        width: 100%;
+    }
+    .login-title {
+        font-size: 24px !important;
+        font-weight: bold !important;
+        text-align: center !important;
+        white-space: nowrap !important;
+        color: #1f1f1f !important;
+        margin-bottom: 25px !important;
+    }
     .confirm-modal { background-color: #ffffff; padding: 30px; border-radius: 14px; border: 2px solid #007bff; box-shadow: 0px 10px 30px rgba(0,0,0,0.2); width: 100%; }
     </style>
 """,
     unsafe_allow_html=True,
 )
 
+# JavaScript ngăn trình duyệt gợi ý "Mật khẩu mạnh" (Set current-password)
 inactivity_and_autocomplete_js = """
 <script>
 (function() {
@@ -706,8 +725,8 @@ inactivity_and_autocomplete_js = """
         try {
             var passInputs = window.parent.document.querySelectorAll('input[type="password"]');
             passInputs.forEach(function(inp) {
-                inp.setAttribute('autocomplete', 'new-password');
-                inp.setAttribute('aria-autocomplete', 'none');
+                inp.setAttribute('autocomplete', 'current-password');
+                inp.setAttribute('aria-autocomplete', 'list');
                 inp.setAttribute('autocorrect', 'off');
                 inp.setAttribute('spellcheck', 'false');
             });
@@ -749,7 +768,10 @@ if not st.session_state.user_session:
   col_l1, col_center, col_l2 = st.columns([1, 2, 1])
   with col_center:
     st.markdown("<div class='login-box'>", unsafe_allow_html=True)
-    st.title('🔐 ĐĂNG NHẬP HỆ THỐNG')
+    st.markdown(
+        "<div class='login-title'>🔐 ĐĂNG NHẬP HỆ THỐNG</div>",
+        unsafe_allow_html=True,
+    )
 
     username_input = st.text_input('Mã học sinh / Tên đăng nhập:')
     password_input = st.text_input('Mật khẩu:', type='password')
@@ -1669,7 +1691,13 @@ if user['role'] in ['teacher', 'admin']:
         k for k, v in users_db.items() if v.get('role') == 'student'
     ]
     all_classes = sorted(
-        list(set(users_db[k].get('class_name', '') for k in all_students))
+        list(
+            set(
+                users_db[k].get('class_name', '')
+                for k in all_students
+                if users_db[k].get('class_name')
+            )
+        )
     )
 
     if user['role'] == 'teacher' and user.get('managed_classes'):
@@ -1691,10 +1719,12 @@ if user['role'] in ['teacher', 'admin']:
         '➕ Thêm Thủ Công 1 Học Sinh',
     ])
 
+    # NHẬP HỌC SINH TỪ EXCEL & TỰ ĐỘNG PHÂN LỚP
     with exp_ex:
       st.write(
-          'Tải lên file Excel (`.xlsx`, `.xls`, `.csv`) chứa danh sách học'
-          ' sinh. **Mật khẩu sẽ tự động gán cố định là `123`**.'
+          'Tải lên file Excel chứa danh sách học sinh có các cột:'
+          ' **MHS/Mã/ID**, **Tên/Họ tên**, **Lớp**, **SĐT/Email**. Mật khẩu ban'
+          ' đầu là `123` (Học sinh có thể tự thay đổi).'
       )
       uploaded_excel = st.file_uploader(
           'Chọn file Excel danh sách học sinh:',
@@ -1715,7 +1745,7 @@ if user['role'] in ['teacher', 'admin']:
               (
                   c
                   for c in df.columns
-                  if 'mã' in c or 'id' in c or 'username' in c
+                  if 'mhs' in c or 'mã' in c or 'id' in c or 'username' in c
               ),
               None,
           )
@@ -1744,14 +1774,16 @@ if user['role'] in ['teacher', 'admin']:
 
           if not id_col or not name_col:
             st.error(
-                "❌ File Excel cần chứa các cột bắt buộc: 'Mã học sinh' (hoặc Mã"
-                " HS) và 'Họ và tên'!"
+                "❌ File Excel cần chứa các cột bắt buộc: 'Mã học sinh' (hoặc MHS)"
+                " và 'Họ và tên'!"
             )
           else:
             count_added = 0
             for _, row in df.iterrows():
               hs_id = str(row[id_col]).strip()
               hs_name = str(row[name_col]).strip()
+
+              # Lấy lớp từ Excel, nếu trống sẽ lấy lớp đang chọn
               hs_class = (
                   str(row[class_col]).strip()
                   if class_col and pd.notna(row[class_col])
@@ -1764,9 +1796,11 @@ if user['role'] in ['teacher', 'admin']:
               )
 
               if hs_id and hs_id != 'nan' and hs_name and hs_name != 'nan':
+                # Nếu đã có tài khoản thì giữ nguyên mật khẩu học sinh đã đổi, chưa có thì gán 123
+                existing_pass = users_db.get(hs_id, {}).get('password', '123')
                 users_db[hs_id] = {
                     'name': hs_name,
-                    'password': '123',
+                    'password': existing_pass,
                     'role': 'student',
                     'class_name': hs_class,
                     'contact': hs_contact,
@@ -1776,7 +1810,7 @@ if user['role'] in ['teacher', 'admin']:
             save_users(users_db)
             st.session_state.excel_uploader_key += 1
             st.toast(
-                f'✅ Đã nhập thành công {count_added} học sinh vào hệ thống!'
+                f'✅ Đã nhập và phân lớp thành công {count_added} học sinh!'
             )
             st.rerun()
         except Exception as e:
@@ -1810,12 +1844,22 @@ if user['role'] in ['teacher', 'admin']:
 
     st.markdown('---')
     st.subheader(f'📋 DANH SÁCH HỌC SINH LỚP {selected_class_view}')
+
     class_students = [
-        {'Mã HS': k, 'Họ Tên': v['name'], 'Email/SĐT': v.get('contact', '')}
+        {
+            'Mã HS': k,
+            'Họ Tên': v['name'],
+            'Lớp': v.get('class_name', selected_class_view),
+            'SĐT/Email': v.get('contact', ''),
+        }
         for k, v in users_db.items()
         if v.get('role') == 'student'
         and v.get('class_name') == selected_class_view
     ]
+
+    # SẮP XẾP TĂNG DẦN THEO MÃ HỌC SINH (MHS)
+    class_students = sorted(class_students, key=lambda x: str(x['Mã HS']))
+
     if class_students:
       st.dataframe(class_students, use_container_width=True)
     else:
@@ -2572,12 +2616,10 @@ elif user['role'] == 'student':
       key_essay = f'essay_{idx}'
       if is_short_ans_subj:
         user_essay[idx] = st.text_input(
-            'Nhập đáp án (VD: 4.5 hoặc 4,5):', key=key_essay
+            'Nhập đáp án:', key=key_essay
         )
       else:
-        user_essay[idx] = st.text_area(
-            'Bài làm:', key=key_essay, height=120
-        )
+        user_essay[idx] = st.text_area('Bài làm:', key=key_essay, height=120)
 
   save_student_draft(
       user['username'],
