@@ -734,7 +734,6 @@ if user['role'] in ['teacher', 'admin']:
     if not raw_subs:
       st.info('Hiện tại không có bài thi nào thuộc quyền chấm của bạn.')
     else:
-      # BƯỚC 1: CHỌN MÔN HỌC (Admin chọn, Giáo viên cố định môn)
       if user['role'] == 'admin':
         avail_subjects = sorted(
             list(set(d.get('subject', '') for d in raw_subs if d.get('subject')))
@@ -752,7 +751,6 @@ if user['role'] in ['teacher', 'admin']:
         if not subs_by_sub:
           st.warning(f'Chưa có bài nộp nào thuộc môn {sel_subject}.')
         else:
-          # BƯỚC 2: CHỌN LỚP HỌC
           avail_classes = sorted(
               list(
                   set(
@@ -774,7 +772,6 @@ if user['role'] in ['teacher', 'admin']:
             if not candidates:
               st.warning(f'Chưa có bài nộp nào thuộc lớp {sel_class}.')
             else:
-              # Xếp bài chưa chấm lên đầu, bài đã chấm ra sau
               candidates.sort(
                   key=lambda x: (
                       1 if x.get('is_graded', False) else 0,
@@ -825,7 +822,6 @@ if user['role'] in ['teacher', 'admin']:
                 is_final_exam = data.get('exam_type') == 'Cuối kỳ'
                 is_graded = data.get('is_graded', False)
 
-                # Kiểm tra hạn 14 ngày
                 sub_dt = parse_timestamp(data.get('timestamp', ''))
                 now_dt = datetime.datetime.now()
                 days_diff = (now_dt - sub_dt).total_seconds() / (24 * 3600)
@@ -853,7 +849,6 @@ if user['role'] in ['teacher', 'admin']:
                     f' {data.get("timestamp")}'
                 )
 
-                # Trạng thái chấm & Nút sửa điểm (14 ngày)
                 edit_mode = False
                 if is_graded:
                   col_st1, col_st2 = st.columns([3, 1])
@@ -1073,13 +1068,42 @@ if user['role'] in ['teacher', 'admin']:
 
         st.dataframe(table_data, use_container_width=True)
 
-  # TAB 3: TẠO & QUẢN LÝ ĐỀ THI
+  # TAB 3: TẠO & QUẢN LÝ ĐỀ THI (ĐÃ BỔ SUNG TẢI LÊN VÀ PHÂN QUYỀN RIÊNG TƯ)
   with tabs[2]:
+    st.subheader('📤 TẢI LÊN NGÂN HÀNG ĐỀ THI CỦA BẠN')
+    uploaded_bank = st.file_uploader(
+        'Chọn file câu hỏi Word (.docx) từ máy tính để tải lên hệ thống:',
+        type=['docx'],
+    )
+
+    if uploaded_bank is not None:
+      # Tự động gán tiền tố username_ để bảo mật riêng tư
+      saved_filename = f"{user['username']}_{uploaded_bank.name}"
+      save_path = os.path.join(BANK_FOLDER, saved_filename)
+      with open(save_path, 'wb') as f:
+        f.write(uploaded_bank.getbuffer())
+      st.success(f'✅ Đã tải lên file câu hỏi `{uploaded_bank.name}` thành công!')
+      st.rerun()
+
+    st.markdown('---')
     st.subheader('➕ Tạo Đề Thi Mới')
-    bank_files = [f for f in os.listdir(BANK_FOLDER) if f.endswith('.docx')]
+
+    # Lọc danh sách file theo quyền riêng tư (Giáo viên chỉ thấy file của chính mình, Admin thấy hết)
+    raw_bank_files = [
+        f for f in os.listdir(BANK_FOLDER) if f.endswith('.docx')
+    ]
+
+    if user['role'] == 'admin':
+      bank_files = raw_bank_files
+    else:
+      prefix = f"{user['username']}_"
+      bank_files = [f for f in raw_bank_files if f.startswith(prefix)]
 
     if not bank_files:
-      st.error('Chưa có file ngân hàng câu hỏi trong thư mục `ngan_hang_de/`!')
+      st.warning(
+          '💡 Bạn chưa có file ngân hàng đề thi nào. Hãy dùng nút **Tải lên**'
+          ' bên trên để đưa file Word (.docx) của bạn vào hệ thống!'
+      )
     else:
       c1, c2 = st.columns(2)
       with c1:
@@ -1111,7 +1135,15 @@ if user['role'] in ['teacher', 'admin']:
         max_attempts_input = st.number_input('Số lần làm bài tối đa:', 1, 10, 1)
 
       with c2:
-        selected_bank = st.selectbox('File Ngân hàng đề:', bank_files)
+        # Hiển thị tên file đẹp bằng cách bỏ bớt tiền tố username
+        display_map = {
+            (f.split('_', 1)[-1] if '_' in f else f): f for f in bank_files
+        }
+        selected_display = st.selectbox(
+            'Chọn File Ngân hàng đề của bạn:', list(display_map.keys())
+        )
+        selected_bank = display_map[selected_display]
+
         mcq_p, tf_p, es_p = parse_question_bank(
             os.path.join(BANK_FOLDER, selected_bank)
         )
@@ -1899,7 +1931,7 @@ elif user['role'] == 'student':
 
     st.stop()
 
-  # --- DANH SÁCH ĐỀ THI CỦA HỌC SINH (SẮP XẾP ƯU TIÊN VÀ HẠN CHÓT) ---
+  # --- DANH SÁCH ĐỀ THI CỦA HỌC SINH ---
   if not st.session_state.get('exam_started', False):
     st.title(
         f"📝 DANH SÁCH ĐỀ THI - {selected_subject.upper() if selected_subject != 'Tất cả môn' else 'TẤT CẢ MÔN'}"
@@ -1947,10 +1979,6 @@ elif user['role'] == 'student':
 
     now_dt = datetime.datetime.now()
 
-    # THUẬT TOÁN SẮP XẾP BÀI THI:
-    # Group 0: Bài CHƯA LÀM và CHƯA HẾT HẠN (Sắp xếp theo hạn chót/mở gần nhất)
-    # Group 1: Bài ĐÃ LÀM (có điểm)
-    # Group 2: Bài CHƯA LÀM nhưng ĐÃ HẾT HẠN (đẩy xuống dưới cùng)
     def exam_sort_key(ex_id):
       ex = filtered_exams[ex_id]
       subm = get_student_exam_submission(user['username'], ex.get('code'))
@@ -2110,7 +2138,6 @@ elif user['role'] == 'student':
             'Bài làm:', key=f'essay_{idx}', height=120
         )
 
-    # TỰ ĐỘNG LƯU BẢN NHÁP MỖI KHI CÓ THAO TÁC / RERUN
     save_student_draft(
         user['username'],
         exam_info.get('code', 'DE'),
