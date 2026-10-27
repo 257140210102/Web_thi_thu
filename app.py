@@ -773,32 +773,48 @@ if not st.session_state.get('user_session'):
     )
 
     with st.form(key='login_form_inner'):
-      username_input = st.text_input('Mã học sinh / Tên đăng nhập:')
-      # DÙNG TYPE='PASSWORD' CHUẨN ĐỂ MÃ HÓA MẬT KHẨU VÀ CHỐNG AUTOFILL
-      password_input = st.text_input('Mật khẩu:', type='password')
-      btn_login = st.form_submit_button('🚀 Đăng Nhập', use_container_width=True)
+      username_input = st.text_input(
+          'Mã học sinh / Tên đăng nhập:',
+          autocomplete='off',
+          key='login_username'
+      )
+
+      password_input = st.text_input(
+          'Mật khẩu:',
+          type='password',
+          autocomplete='off',
+          key='login_password'
+      )
+
+      btn_login = st.form_submit_button(
+          '🚀 Đăng Nhập',
+          use_container_width=True
+      )
+
 
       if btn_login:
-        if username_input in users_db:
-          if users_db[username_input]['password'] == password_input:
-            u = users_db[username_input]
-            st.session_state.user_session = {
-                'username': username_input,
-                'name': u['name'],
-                'role': u['role'],
-                'is_head': u.get('is_head', False),
-                'subject': u.get('subject', 'ALL'),
-                'managed_classes': u.get('managed_classes', ['ALL']),
-                'class_name': u.get('class_name', ''),
-            }
-            st.session_state.last_activity = time.time()
-            st.query_params['u'] = username_input  # Lưu URL param giữ session
-            st.success('Đăng nhập thành công!')
-            st.rerun()
+          if username_input in users_db:
+              if users_db[username_input]['password'] == password_input:
+                  u = users_db[username_input]
+
+                  st.session_state.user_session = {
+                      'username': username_input,
+                      'name': u['name'],
+                      'role': u['role'],
+                      'is_head': u.get('is_head', False),
+                      'subject': u.get('subject', 'ALL'),
+                      'managed_classes': u.get('managed_classes', ['ALL']),
+                      'class_name': u.get('class_name', ''),
+                  }
+
+                  st.session_state.last_activity = time.time()
+                  st.query_params['u'] = username_input
+                  st.success('Đăng nhập thành công!')
+                  st.rerun()
+              else:
+                  st.error('❌ Mật khẩu không chính xác!')
           else:
-            st.error('❌ Mật khẩu không chính xác!')
-        else:
-          st.error('❌ Mã đăng nhập không tồn tại!')
+              st.error('❌ Mã đăng nhập không tồn tại!')
 
     if st.button('Quên mật khẩu?', key='btn_forgot_toggle'):
       st.session_state.show_forgot = not st.session_state.show_forgot
@@ -1545,50 +1561,86 @@ if user['role'] in ['teacher', 'admin']:
     else:
       selectable_classes = all_classes if all_classes else ['10A1']
 
-    # BỘ LỌC CHỌN KHỐI RỒI MỚI CHỌN LỚP
-    f_col1, f_col2 = st.columns(2)
-    with f_col1:
-      selected_grade = st.selectbox(
-          '1️⃣ Chọn Khối Học:', ['Khối 10', 'Khối 11', 'Khối 12']
-      )
+    # BỘ LỌC: CHỌN KHỐI → CHỌN LỚP → HIỂN THỊ DANH SÁCH
 
-    grade_num = selected_grade.split()[-1]  # lấy '10', '11', '12'
-    filtered_classes_by_grade = [
-        c for c in selectable_classes if c.startswith(grade_num)
-    ]
+    f_col1, f_col2 = st.columns(2)
+
+    with f_col1:
+        selected_grade = st.selectbox(
+            '1️⃣ Chọn Khối Học:',
+            options=['<Chọn khối>', 'Khối 10', 'Khối 11', 'Khối 12'],
+            index=0,
+            key='filter_grade'
+        )
+
+    # Chỉ lọc lớp khi đã chọn khối
+    if selected_grade != '<Chọn khối>':
+        grade_num = selected_grade.split()[-1]
+
+        filtered_classes_by_grade = sorted([
+            c for c in selectable_classes
+            if str(c).strip().startswith(grade_num)
+        ])
+    else:
+        filtered_classes_by_grade = []
 
     with f_col2:
-      selected_class_view = st.selectbox(
-          '2️⃣ Chọn Lớp Học:',
-          options=(
-              filtered_classes_by_grade
-              if filtered_classes_by_grade
-              else selectable_classes
-          ),
-      )
+        # Chưa chọn khối thì chưa cho chọn lớp
+        if selected_grade == '<Chọn khối>':
+            st.selectbox(
+                '2️⃣ Chọn Lớp Học:',
+                options=['<Chọn lớp>'],
+                index=0,
+                disabled=True,
+                key='filter_class_empty'
+            )
+            selected_class_view = '<Chọn lớp>'
+
+        else:
+            class_options = ['<Chọn lớp>'] + filtered_classes_by_grade
+
+            selected_class_view = st.selectbox(
+                '2️⃣ Chọn Lớp Học:',
+                options=class_options,
+                index=0,
+                key=f'filter_class_{grade_num}'
+            )
 
     st.markdown('---')
-    st.subheader(f'📋 DANH SÁCH HỌC SINH LỚP {selected_class_view}')
+
+    # CHỈ HIỂN THỊ DANH SÁCH KHI ĐÃ CHỌN CẢ KHỐI VÀ LỚP
+    if (
+        selected_grade != '<Chọn khối>'
+        and selected_class_view != '<Chọn lớp>'
+    ):
+        st.subheader(f'📋 DANH SÁCH HỌC SINH LỚP {selected_class_view}')
 
     class_students = [
         {
             'Mã HS': k,
-            'Họ Tên': v['name'],
-            'Lớp': v.get('class_name', selected_class_view),
+            'Họ Tên': v.get('name', ''),
+            'Lớp': v.get('class_name', ''),
             'SĐT/Email': v.get('contact', ''),
         }
         for k, v in users_db.items()
         if v.get('role') == 'student'
-        and v.get('class_name') == selected_class_view
+        and str(v.get('class_name', '')).strip() == selected_class_view
     ]
 
-    # SẮP XẾP TĂNG DẦN THEO MÃ HỌC SINH
-    class_students = sorted(class_students, key=lambda x: str(x['Mã HS']))
+    # Sắp xếp tăng dần theo mã học sinh
+    class_students = sorted(
+        class_students,
+        key=lambda x: str(x['Mã HS'])
+    )
 
     if class_students:
-      st.dataframe(class_students, use_container_width=True)
+        st.dataframe(
+            class_students,
+            use_container_width=True,
+            hide_index=True
+        )
     else:
-      st.info(f'Chưa có học sinh nào trong lớp {selected_class_view}.')
+        st.info(f'Chưa có học sinh nào trong lớp {selected_class_view}.')
 
     st.markdown('<br>', unsafe_allow_html=True)
 
