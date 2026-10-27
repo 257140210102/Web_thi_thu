@@ -1,0 +1,13 @@
+# Dữ liệu hệ thống & Thông tin cá nhân (KHÔNG đẩy lên GitHub)
+users.json
+exams.json
+ngan_hang_de/
+bai_nop/
+ban_nhap/
+
+# Python cache & môi trường ảo
+__pycache__/
+*.pyc
+.venv/
+venv/
+.streamlit/
