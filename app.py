@@ -666,11 +666,6 @@ st.markdown(
         z-index: 999999 !important;
     }
 
-    /* ẨN POPUP MẬT KHẨU TỰ ĐỘNG BẰNG CÁCH MÃ HÓA Ô NHẬP */
-    div[data-testid="stTextInput"] input[aria-label*="Mật khẩu"] {
-        -webkit-text-security: disc !important;
-    }
-
     /* KHUNG ĐĂNG NHẬP NGUYÊN KHỐI NẰM TRONG VIỀN VÀ BÓNG TẠO SỰ CÂN ĐỐI */
     .login-container { 
         background-color: #ffffff; 
@@ -779,7 +774,8 @@ if not st.session_state.get('user_session'):
 
     with st.form(key='login_form_inner'):
       username_input = st.text_input('Mã học sinh / Tên đăng nhập:')
-      password_input = st.text_input('Mật khẩu:')
+      # DÙNG TYPE='PASSWORD' CHUẨN ĐỂ MÃ HÓA MẬT KHẨU VÀ CHỐNG AUTOFILL
+      password_input = st.text_input('Mật khẩu:', type='password')
       btn_login = st.form_submit_button('🚀 Đăng Nhập', use_container_width=True)
 
       if btn_login:
@@ -823,8 +819,8 @@ if not st.session_state.get('user_session'):
           st.error('❌ Thông tin đăng ký không chính xác!')
 
       if st.session_state.get('reset_user'):
-        new_pass = st.text_input('Nhập mật khẩu mới:')
-        confirm_pass = st.text_input('Nhập lại mật khẩu mới:')
+        new_pass = st.text_input('Nhập mật khẩu mới:', type='password')
+        confirm_pass = st.text_input('Nhập lại mật khẩu mới:', type='password')
         if st.button('✅ Đổi Mật Khẩu'):
           if new_pass != confirm_pass:
             st.error('❌ Mật khẩu xác nhận không khớp!')
@@ -861,9 +857,9 @@ with st.popover(f"👤 {user['name']} ({role_display})"):
 
   with st.expander('🔑 Đổi Mật Khẩu'):
     with st.form(key=f"form_change_pass_{user['username']}"):
-      old_p = st.text_input('Mật khẩu cũ:')
-      new_p = st.text_input('Mật khẩu mới:')
-      confirm_p = st.text_input('Nhập lại mật khẩu mới:')
+      old_p = st.text_input('Mật khẩu cũ:', type='password')
+      new_p = st.text_input('Mật khẩu mới:', type='password')
+      confirm_p = st.text_input('Nhập lại mật khẩu mới:', type='password')
       sub_pass = st.form_submit_button('💾 Lưu Mật Khẩu Mới')
 
       if sub_pass:
@@ -1695,7 +1691,9 @@ if user['role'] in ['teacher', 'admin']:
           new_hs_id = st.text_input('Mã Học sinh (Username):')
           new_hs_name = st.text_input('Họ và tên:')
         with c2:
-          new_hs_pass = st.text_input('Mật khẩu:', value='123', disabled=True)
+          new_hs_pass = st.text_input(
+              'Mật khẩu:', value='123', disabled=True, type='password'
+          )
           new_hs_contact = st.text_input('Email / SĐT:')
 
         if st.button('➕ Thêm Học Sinh'):
@@ -1713,7 +1711,7 @@ if user['role'] in ['teacher', 'admin']:
             st.toast(f'✅ Đã thêm học sinh {new_hs_name}!')
             st.rerun()
 
-  # TAB 5: QUẢN LÝ GIÁO VIÊN (ADMIN CÓ THỂ ĐỔI CẢ MÔN HỌC GIẢNG DẠY)
+  # TAB 5: QUẢN LÝ GIÁO VIÊN & PHÂN CÔNG
   if user['role'] == 'admin' or user.get('is_head'):
     with tabs[4]:
       st.subheader('📋 DANH SÁCH GIÁO VIÊN TRONG HỆ THỐNG')
@@ -1736,6 +1734,62 @@ if user['role'] in ['teacher', 'admin']:
 
       if teacher_table:
         st.dataframe(teacher_table, use_container_width=True)
+      else:
+        st.info('Chưa có giáo viên nào trong danh sách.')
+
+      st.markdown('---')
+
+      # KHÔI PHỤC PHẦN "THÊM GIÁO VIÊN MỚI"
+      with st.expander('➕ Thêm Giáo Viên Mới'):
+        col_add1, col_add2 = st.columns(2)
+        with col_add1:
+          new_gv_id = st.text_input('Mã GV / Tên đăng nhập:', key='add_gv_id')
+          new_gv_name = st.text_input('Họ và Tên:', key='add_gv_name')
+          new_gv_pass = st.text_input(
+              'Mật khẩu ban đầu:',
+              value='123',
+              type='password',
+              key='add_gv_pass',
+          )
+        with col_add2:
+          new_gv_subject = st.selectbox(
+              'Môn Học Giảng Dạy:',
+              options=list(SUBJECT_PREFIXES.keys()),
+              key='add_gv_subj',
+          )
+          new_gv_classes = st.text_input(
+              'Các Lớp Quản Lý (phân cách bằng dấu phẩy, VD: 10A1, 10A2):',
+              value='10A1',
+              key='add_gv_classes',
+          )
+          new_gv_contact = st.text_input('SĐT / Email:', key='add_gv_contact')
+          is_head_dept = st.checkbox(
+              'Là Trưởng Bộ Môn?', key='add_gv_is_head'
+          )
+
+        if st.button(
+            '➕ Thêm Giáo Viên', type='primary', key='btn_add_gv_submit'
+        ):
+          if not new_gv_id or not new_gv_name:
+            st.error('❌ Vui lòng điền đầy đủ Mã GV và Họ tên!')
+          elif new_gv_id in users_db:
+            st.error('❌ Mã Giáo viên / Tên đăng nhập này đã tồn tại!')
+          else:
+            managed_list = [
+                c.strip() for c in new_gv_classes.split(',') if c.strip()
+            ]
+            users_db[new_gv_id] = {
+                'name': new_gv_name,
+                'password': new_gv_pass if new_gv_pass else '123',
+                'role': 'teacher',
+                'is_head': is_head_dept,
+                'subject': new_gv_subject,
+                'managed_classes': managed_list,
+                'contact': new_gv_contact,
+            }
+            save_users(users_db)
+            st.toast(f'✅ Đã thêm giáo viên {new_gv_name} thành công!')
+            st.rerun()
 
       st.markdown('---')
       st.subheader('✏️ CẬP NHẬT MÔN HỌC & LỚP QUẢN LÝ CHO GIÁO VIÊN')
