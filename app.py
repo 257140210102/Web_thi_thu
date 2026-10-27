@@ -1748,38 +1748,33 @@ if user['role'] in ['teacher', 'admin']:
 
           # TAB 1: IMPORT FILE JSON
           with exp_ex:
-              uploaded_users_file = st.file_uploader(
-                  "Chọn file users.json từ máy tính:",
-                  type=["json"],
-                  key="upload_users_json_key",
-              )
+            if "reset_users_uploader" not in st.session_state:
+                st.session_state.reset_users_uploader = 0
 
-              if uploaded_users_file is not None:
-                  try:
-                      imported_users = json.load(uploaded_users_file)
+            uploaded_users_file = st.file_uploader(
+                "Chọn file users.json từ máy tính:",
+                type=["json"],
+                key=f"upload_users_json_{st.session_state.reset_users_uploader}",
+            )
 
-                      if isinstance(imported_users, dict):
-                          # Kiểm tra mã giáo viên trước khi cập nhật
-                          duplicates = set(imported_users) & set(users_db)
+            if uploaded_users_file is not None:
+                try:
+                    imported_users = json.load(uploaded_users_file)
 
-                          if duplicates:
-                              st.warning(
-                                  "Các tài khoản đã tồn tại sẽ được cập nhật: "
-                                  + ", ".join(duplicates)
-                              )
+                    if isinstance(imported_users, dict):
+                        users_db.update(imported_users)
+                        save_users(users_db)
 
-                          users_db.update(imported_users)
-                          save_users(users_db)
+                        st.session_state.reset_users_uploader += 1
+                        st.toast("✅ Đã import users.json thành công!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Định dạng file JSON không hợp lệ!")
 
-                          st.success("Đã import users.json thành công!")
-                          st.rerun()
-                      else:
-                          st.error("Định dạng file JSON không hợp lệ!")
-
-                  except json.JSONDecodeError:
-                      st.error("File JSON bị lỗi định dạng!")
-                  except Exception as e:
-                      st.error(f"Lỗi đọc file JSON: {e}")
+                except json.JSONDecodeError:
+                    st.error("❌ File JSON bị lỗi định dạng!")
+                except Exception as e:
+                    st.error(f"❌ Lỗi đọc file JSON: {e}")
 
           # TAB 2: THÊM THỦ CÔNG
           with exp_man:
