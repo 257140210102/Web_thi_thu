@@ -1715,6 +1715,24 @@ if user['role'] in ['teacher', 'admin']:
   if user['role'] == 'admin' or user.get('is_head'):
     with tabs[4]:
       st.subheader('📋 DANH SÁCH GIÁO VIÊN TRONG HỆ THỐNG')
+      with st.expander('📥 Tải Lên / Import File users.json Có Sẵn'):
+        uploaded_users_file = st.file_uploader(
+            'Chọn file users.json từ máy tính của bạn:',
+            type=['json'],
+            key='upload_users_json_key',
+        )
+        if uploaded_users_file is not None:
+          try:
+            imported_users = json.load(uploaded_users_file)
+            if isinstance(imported_users, dict):
+              users_db.update(imported_users)
+              save_users(users_db)
+              st.toast('✅ Đã tải lên và cập nhật file users.json thành công!')
+              st.rerun()
+            else:
+              st.error('❌ Định dạng file JSON không hợp lệ!')
+          except Exception as e:
+            st.error(f'❌ Lỗi đọc file JSON: {e}')
       teacher_table = []
       for gv_id, gv_info in users_db.items():
         if gv_info.get('role') == 'teacher':
