@@ -58,3 +58,8 @@ def create_question_bank():
 if __name__ == '__main__':
   create_question_bank()
 # python -m streamlit run app.py
+"""
+git add .
+git commit -m "UP1"
+git push origin main
+"""
