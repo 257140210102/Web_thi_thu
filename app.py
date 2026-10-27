@@ -9,16 +9,21 @@ from docx import Document
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Thư mục lưu trữ
+# Thư mục lưu trữ hệ thống
 BANK_FOLDER = 'ngan_hang_de'
 SUBMIT_FOLDER = 'bai_nop'
 DRAFT_FOLDER = 'ban_nhap'
+IMG_FOLDER = 'cau_hoi_images'
 USERS_FILE = 'users.json'
 EXAMS_FILE = 'exams.json'
 
 os.makedirs(BANK_FOLDER, exist_ok=True)
 os.makedirs(SUBMIT_FOLDER, exist_ok=True)
 os.makedirs(DRAFT_FOLDER, exist_ok=True)
+os.makedirs(IMG_FOLDER, exist_ok=True)
+
+# MÔN HỌC ÁP DỤNG HÌNH THỨC "TRẢ LỜI NGẮN" VÀ CHẤM TỰ ĐỘNG
+SHORT_ANSWER_SUBJECTS = ['Toán', 'Vật Lý', 'Hóa Học']
 
 # BẢNG TIỀN TỐ MÃ ĐỀ THI THEO MÔN HỌC
 SUBJECT_PREFIXES = {
@@ -35,9 +40,69 @@ SUBJECT_PREFIXES = {
 }
 
 
-# --- ĐỊNH DẠNG VÀ KIỂM TRA MẬT KHẨU ---
+# --- HÀM SO SÁNH ĐÁP ÁN TRẢ LỜI NGẮN (CHẤP NHẬN CẢ DẤU . VÀ DẤU ,) ---
+def check_short_answer(user_ans, correct_ans):
+  if user_ans is None or correct_ans is None:
+    return False
+
+  u_str = str(user_ans).strip().replace(' ', '')
+  c_str = str(correct_ans).strip().replace(' ', '')
+
+  if not u_str or not c_str:
+    return False
+
+  u_norm = u_str.replace(',', '.')
+  c_norm = c_str.replace(',', '.')
+
+  try:
+    u_num = float(u_norm)
+    c_num = float(c_norm)
+    return abs(u_num - c_num) < 1e-6
+  except ValueError:
+    pass
+
+  return u_norm.lower() == c_norm.lower()
+
+
+# --- THUẬT TOÁN RÚT ĐỀ PHÂN BỐ ĐỀU THEO MA TRẬN CHƯƠNG & MỨC ĐỘ ---
+def sample_questions_balanced(question_pool, total_needed):
+  """Bốc ngẫu nhiên câu hỏi phân bố đều theo từng Chương và Mức độ nhận thức."""
+  if not question_pool or total_needed <= 0:
+    return []
+  if len(question_pool) <= total_needed:
+    selected = question_pool.copy()
+    random.shuffle(selected)
+    return selected
+
+  groups = {}
+  for q in question_pool:
+    key = (
+        q.get('chapter', 'Chương 1'),
+        q.get('level', 'Thông hiểu'),
+    )
+    groups.setdefault(key, []).append(q)
+
+  for key in groups:
+    random.shuffle(groups[key])
+
+  group_keys = list(groups.keys())
+  random.shuffle(group_keys)
+
+  selected = []
+  while len(selected) < total_needed:
+    added = False
+    for key in group_keys:
+      if groups[key] and len(selected) < total_needed:
+        selected.append(groups[key].pop())
+        added = True
+    if not added:
+      break
+
+  return selected
+
+
+# --- KIỂM TRA ĐỊNH DẠNG MẬT KHẨU ---
 def validate_password(password):
-  """Kiểm tra mật khẩu có từ 8 ký tự trở lên và bao gồm cả chữ và số."""
   if len(password) < 8:
     return False, '❌ Mật khẩu phải có từ 8 ký tự trở lên!'
   if not re.search(r'[a-zA-Z]', password) or not re.search(r'[0-9]', password):
@@ -49,7 +114,6 @@ def validate_password(password):
 
 
 def parse_timestamp(ts_str):
-  """Chuyển đổi chuỗi timestamp sang đối tượng datetime."""
   if not ts_str:
     return datetime.datetime.now()
   for fmt in (
@@ -66,7 +130,6 @@ def parse_timestamp(ts_str):
 
 
 def generate_exam_code(subject, exams_db):
-  """Tự động sinh mã bài thi theo dạng MÔN + STT (VD: TO01, NV02)."""
   prefix = SUBJECT_PREFIXES.get(subject, 'DE')
   max_num = 0
   for ex in exams_db.values():
@@ -80,7 +143,6 @@ def generate_exam_code(subject, exams_db):
 
 
 def get_real_exam_code(submission_data, exams_db):
-  """Lấy chuẩn mã đề thi dựa trên cả MÔN HỌC và TÊN BÀI THI."""
   code = submission_data.get('exam_code')
   subj = submission_data.get('subject')
   title = submission_data.get('exam_title')
@@ -104,7 +166,7 @@ def get_real_exam_code(submission_data, exams_db):
   return 'DE'
 
 
-# --- 1. QUẢN LÝ DỮ LIỆU TÀI KHOẢN & BÀI NỘP / BẢN NHÁP ---
+# --- QUẢN LÝ DỮ LIỆU TÀI KHOẢN & BÀI THI ---
 def load_users():
   if not os.path.exists(USERS_FILE):
     default_users = {
@@ -185,7 +247,6 @@ def save_exams(exams):
 
 
 def get_student_exam_submission(student_id, exam_code):
-  """Lấy bài nộp mới nhất của học sinh cho mã đề thi."""
   if not os.path.exists(SUBMIT_FOLDER):
     return None
   submissions = []
@@ -208,7 +269,6 @@ def get_student_exam_submission(student_id, exam_code):
   return sorted(submissions, key=lambda x: x.get('timestamp', ''))[-1]
 
 
-# --- QUẢN LÝ BÀI LÀM DỞ ---
 def save_student_draft(
     username,
     exam_code,
@@ -271,7 +331,12 @@ def clear_exam_session_state():
     del st.session_state['exam_data']
 
 
-# --- 2. ĐỌC FILE WORD CÂU HỎI ---
+# --- ĐỌC CÔNG THỨC TOÁN, HÌNH ẢNH & THẺ MA TRẬN TỪ WORD ---
+def get_para_text(p):
+  nodes = p._element.xpath('.//w:t | .//m:t')
+  return ''.join([node.text for node in nodes if node.text]).strip()
+
+
 def is_red_text(run):
   if run.font.color and run.font.color.rgb:
     rgb_str = str(run.font.color.rgb).upper()
@@ -284,7 +349,65 @@ def is_red_text(run):
   return False
 
 
-@st.cache_data(show_spinner='Đang tải câu hỏi từ Ngân hàng đề...')
+def extract_paragraph_images(p, doc, q_id):
+  img_paths = []
+  blips = p._element.xpath('.//a:blip')
+  for idx, blip in enumerate(blips):
+    rId = blip.attrib.get(
+        '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed'
+    )
+    if rId and rId in doc.part.related_parts:
+      image_part = doc.part.related_parts[rId]
+      ext = image_part.content_type.split('/')[-1]
+      if ext == 'jpeg':
+        ext = 'jpg'
+
+      img_filename = f'q_{q_id}_{idx}_{int(time.time()*1000)}.{ext}'
+      save_path = os.path.join(IMG_FOLDER, img_filename)
+
+      with open(save_path, 'wb') as f:
+        f.write(image_part.blob)
+      img_paths.append(save_path)
+  return img_paths
+
+
+def extract_question_metadata(raw_text):
+  """Bóc tách thông tin [Chương X] và [Mức độ] từ nội dung câu hỏi."""
+  chapter = 'Chương 1'
+  level = 'Thông hiểu'
+
+  chap_match = re.search(
+      r'\[(?:Chương|Bài|Chủ đề)\s*([\w\d\s\.-]+)\]', raw_text, re.IGNORECASE
+  )
+  if chap_match:
+    chapter = f'Chương {chap_match.group(1).strip()}'
+
+  if re.search(r'\[(Nhận biết|NB)\]', raw_text, re.IGNORECASE):
+    level = 'Nhận biết'
+  elif re.search(r'\[(Thông hiểu|TH)\]', raw_text, re.IGNORECASE):
+    level = 'Thông hiểu'
+  elif re.search(r'\[(Vận dụng cao|VDC)\]', raw_text, re.IGNORECASE):
+    level = 'Vận dụng cao'
+  elif re.search(r'\[(Vận dụng|VD)\]', raw_text, re.IGNORECASE):
+    level = 'Vận dụng'
+
+  clean_q = re.sub(
+      r'\[(?:Chương|Bài|Chủ đề)\s*[\w\d\s\.-]+\]',
+      '',
+      raw_text,
+      flags=re.IGNORECASE,
+  )
+  clean_q = re.sub(
+      r'\[(Nhận biết|Thông hiểu|Vận dụng cao|Vận dụng|NB|TH|VD|VDC)\]',
+      '',
+      clean_q,
+      flags=re.IGNORECASE,
+  ).strip()
+
+  return clean_q, chapter, level
+
+
+@st.cache_data(show_spinner='Đang tải câu hỏi và ma trận từ Ngân hàng đề...')
 def parse_question_bank(file_path):
   if not os.path.exists(file_path):
     return [], [], []
@@ -294,12 +417,13 @@ def parse_question_bank(file_path):
   current_item = None
 
   for p in doc.paragraphs:
-    text = p.text.strip()
-    if not text:
-      continue
+    text = get_para_text(p)
+    has_red = any(is_red_text(run) for run in p.runs)
+    is_marked = text.startswith('*') or has_red
+    clean_text = text.lstrip('*').strip() if text else ''
 
     is_heading_1 = p.style.name.startswith('Heading 1')
-    text_upper = text.upper()
+    text_upper = clean_text.upper()
 
     if is_heading_1 or any(
         text_upper.startswith(prefix)
@@ -320,86 +444,128 @@ def parse_question_bank(file_path):
       elif 'ĐÚNG SAI' in text_upper:
         current_section = 'TF'
         continue
-      elif 'TỰ LUẬN' in text_upper:
+      elif 'TỰ LUẬN' in text_upper or 'TRẢ LỜI NGẮN' in text_upper:
         current_section = 'ESSAY'
         continue
 
-    has_red = any(is_red_text(run) for run in p.runs)
-    is_marked = text.startswith('*') or has_red
-    clean_text = text.lstrip('*').strip()
+    if not clean_text and not p._element.xpath('.//a:blip'):
+      continue
+
+    is_q_header = re.match(
+        r'^(Câu|Bài)\s*\d+[\.\:\s]?', clean_text, re.IGNORECASE
+    )
 
     if current_section == 'MCQ':
-      if re.match(r'^(Câu|Bài)\s*\d+[:\.]', clean_text, re.IGNORECASE):
+      if is_q_header:
         if current_item:
           mcq_pool.append(current_item)
-        q_text = re.sub(
-            r'^(Câu|Bài)\s*\d+[:\.]\s*', '', clean_text, flags=re.IGNORECASE
+        q_id = len(mcq_pool) + 1
+        raw_q = re.sub(
+            r'^(Câu|Bài)\s*\d+[\.\:\s]*', '', clean_text, flags=re.IGNORECASE
         ).strip()
+        q_text, chapter, level = extract_question_metadata(raw_q)
+        p_imgs = extract_paragraph_images(p, doc, f'mcq_{q_id}')
+
         current_item = {
-            'id': len(mcq_pool) + 1,
+            'id': q_id,
             'question': q_text,
             'options': [],
+            'images': p_imgs,
+            'chapter': chapter,
+            'level': level,
         }
-      elif (
-          re.match(r'^[A-D][:\.]', clean_text, re.IGNORECASE) and current_item
-      ):
-        opt_text = re.sub(
-            r'^[A-D][:\.]\s*', '', clean_text, flags=re.IGNORECASE
-        ).strip()
-        current_item['options'].append(
-            {'text': opt_text, 'is_correct': is_marked}
+      elif current_item:
+        p_imgs = extract_paragraph_images(
+            p, doc, f"mcq_{current_item['id']}_sub"
         )
+        if p_imgs:
+          current_item['images'].extend(p_imgs)
+
+        if re.match(r'^[A-D][\.\:\)]', clean_text, re.IGNORECASE):
+          opt_text = re.sub(
+              r'^[A-D][\.\:\)]\s*', '', clean_text, flags=re.IGNORECASE
+          ).strip()
+          current_item['options'].append(
+              {'text': opt_text, 'is_correct': is_marked}
+          )
+        elif clean_text and not current_item['options']:
+          current_item['question'] += ' ' + clean_text
 
     elif current_section == 'TF':
-      if re.match(r'^(Câu|Bài)\s*\d+[:\.]', clean_text, re.IGNORECASE):
+      if is_q_header:
         if current_item:
           tf_pool.append(current_item)
-        q_text = re.sub(
-            r'^(Câu|Bài)\s*\d+[:\.]\s*', '', clean_text, flags=re.IGNORECASE
+        q_id = len(tf_pool) + 1
+        raw_q = re.sub(
+            r'^(Câu|Bài)\s*\d+[\.\:\s]*', '', clean_text, flags=re.IGNORECASE
         ).strip()
+        q_text, chapter, level = extract_question_metadata(raw_q)
+        p_imgs = extract_paragraph_images(p, doc, f'tf_{q_id}')
+
         current_item = {
-            'id': len(tf_pool) + 1,
+            'id': q_id,
             'question': q_text,
             'sub_items': [],
+            'images': p_imgs,
+            'chapter': chapter,
+            'level': level,
         }
-      elif (
-          re.match(r'^[a-d][\)\:\.]', clean_text, re.IGNORECASE) and current_item
-      ):
-        is_true = is_marked or '[ĐÚNG]' in clean_text.upper()
-        clean_item = re.sub(
-            r'\[(ĐÚNG|SAI)\]', '', clean_text, flags=re.IGNORECASE
-        ).strip()
-        current_item['sub_items'].append({'text': clean_item, 'answer': is_true})
+      elif current_item:
+        p_imgs = extract_paragraph_images(p, doc, f"tf_{current_item['id']}_sub")
+        if p_imgs:
+          current_item['images'].extend(p_imgs)
+
+        if re.match(r'^[a-d][\)\:\.]', clean_text, re.IGNORECASE):
+          is_true = is_marked or '[ĐÚNG]' in clean_text.upper()
+          clean_item = re.sub(
+              r'\[(ĐÚNG|SAI)\]', '', clean_text, flags=re.IGNORECASE
+          ).strip()
+          clean_item = re.sub(
+              r'^[a-d][\)\:\.]\s*', '', clean_item, flags=re.IGNORECASE
+          ).strip()
+          current_item['sub_items'].append(
+              {'text': clean_item, 'answer': is_true}
+          )
+        elif clean_text and not current_item['sub_items']:
+          current_item['question'] += ' ' + clean_text
 
     elif current_section == 'ESSAY':
       is_essay_header = (
-          re.match(
-              r'^(Câu|Bài|\d+)\s*[\d\.\:\)\s]', clean_text, re.IGNORECASE
-          )
+          is_q_header
           and not clean_text.lower().startswith('đáp án')
           and not clean_text.lower().startswith('gợi ý')
       )
       if is_essay_header:
         if current_item:
           essay_pool.append(current_item)
-        q_text = re.sub(
-            r'^(Câu|Bài)\s*\d+[:\.]\s*|^\d+[\.\:\)]\s*',
-            '',
-            clean_text,
-            flags=re.IGNORECASE,
+        q_id = len(essay_pool) + 1
+        raw_q = re.sub(
+            r'^(Câu|Bài)\s*\d+[\.\:\s]*', '', clean_text, flags=re.IGNORECASE
         ).strip()
+        q_text, chapter, level = extract_question_metadata(raw_q)
+        p_imgs = extract_paragraph_images(p, doc, f'es_{q_id}')
+
         current_item = {
-            'id': len(essay_pool) + 1,
+            'id': q_id,
             'question': q_text,
             'sample_answer': '',
+            'images': p_imgs,
+            'chapter': chapter,
+            'level': level,
         }
-      elif (
-          clean_text.lower().startswith('đáp án')
-          or clean_text.lower().startswith('gợi ý')
-      ) and current_item:
-        current_item['sample_answer'] = clean_text.split(':', 1)[-1].strip()
       elif current_item:
-        current_item['question'] += ' ' + clean_text
+        p_imgs = extract_paragraph_images(p, doc, f"es_{current_item['id']}_sub")
+        if p_imgs:
+          current_item['images'].extend(p_imgs)
+
+        if text.startswith('*'):
+          current_item['sample_answer'] = text.lstrip('*').strip()
+        elif clean_text.lower().startswith(
+            'đáp án'
+        ) or clean_text.lower().startswith('gợi ý'):
+          current_item['sample_answer'] = clean_text.split(':', 1)[-1].strip()
+        elif clean_text:
+          current_item['question'] += ' ' + clean_text
 
   if current_item:
     if current_section == 'MCQ':
@@ -437,18 +603,14 @@ def grade_tf(user_answers, correct_answers):
   return score_map.get(correct_count, 0.0), correct_count
 
 
-# --- 3. GIAO DIỆN & STYLE ---
+# --- GIAO DIỆN & DỊCH VỤ NỀN ---
 st.set_page_config(page_title='Hệ Thống Thi Thử Trực Tuyến', layout='wide')
 
 st.markdown(
     """
     <style>
-    html, body, p, label, input, textarea {
-        font-family: 'Arial', sans-serif !important;
-    }
-    button:not([aria-label*="password"]):not([aria-label*="Password"]) {
-        font-family: 'Arial', sans-serif !important;
-    }
+    html, body, p, label, input, textarea { font-family: 'Arial', sans-serif !important; }
+    button:not([aria-label*="password"]):not([aria-label*="Password"]) { font-family: 'Arial', sans-serif !important; }
     h3, .stSubheader, div[data-testid="stSubheader"] *, div[data-testid="stMarkdownContainer"] h3 {
         font-family: 'Arial', sans-serif !important;
         font-size: 17px !important;
@@ -459,50 +621,23 @@ st.markdown(
     [data-testid="stIcon"], .material-symbols-rounded, [class*="stIcon"], i[class*="st-"], button[aria-label*="password"] *, button[aria-label*="Password"] * {
         font-family: 'Material Symbols Rounded', 'Material Icons' !important;
     }
-    div[id^="q_"] {
-        scroll-margin-top: 70px !important;
-        display: block;
-    }
-    div[role="radiogroup"] label p, label p {
-        font-family: 'Arial', sans-serif !important;
-        font-size: 17px !important;
-        color: #2b2b2b !important;
-    }
-    textarea {
-        font-family: 'Arial', sans-serif !important;
-        font-size: 17px !important;
-    }
-    .login-box {
-        background-color: #ffffff;
-        padding: 30px;
-        border-radius: 12px;
-        box-shadow: 0px 4px 15px rgba(0,0,0,0.1);
-        margin: 50px auto;
-        max-width: 450px;
-    }
-    .confirm-modal {
-        background-color: #ffffff;
-        padding: 30px;
-        border-radius: 14px;
-        border: 2px solid #007bff;
-        box-shadow: 0px 10px 30px rgba(0,0,0,0.2);
-        width: 100%;
-    }
+    div[id^="q_"] { scroll-margin-top: 70px !important; display: block; }
+    div[role="radiogroup"] label p, label p { font-family: 'Arial', sans-serif !important; font-size: 17px !important; color: #2b2b2b !important; }
+    textarea, input[type="text"] { font-family: 'Arial', sans-serif !important; font-size: 17px !important; }
+    .login-box { background-color: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0px 4px 15px rgba(0,0,0,0.1); margin: 50px auto; max-width: 450px; }
+    .confirm-modal { background-color: #ffffff; padding: 30px; border-radius: 14px; border: 2px solid #007bff; box-shadow: 0px 10px 30px rgba(0,0,0,0.2); width: 100%; }
     </style>
 """,
     unsafe_allow_html=True,
 )
 
-# JS TỰ ĐỘNG ĐĂNG XUẤT 5 PHÚT & TẮT GỢI Ý MẬT KHẨU
 inactivity_and_autocomplete_js = """
 <script>
 (function() {
     var timer;
     function resetTimer() {
         clearTimeout(timer);
-        timer = setTimeout(function() {
-            window.parent.location.reload();
-        }, 300000); 
+        timer = setTimeout(function() { window.parent.location.reload(); }, 300000); 
     }
     try {
         window.parent.document.onmousemove = resetTimer;
@@ -540,7 +675,6 @@ if 'submitted_data' not in st.session_state:
 if 'confirm_exam_id' not in st.session_state:
   st.session_state.confirm_exam_id = None
 
-# TỰ ĐỘNG ĐĂNG XUẤT SAU 5 PHÚT KHÔNG THAO TÁC
 now_ts = time.time()
 if st.session_state.user_session:
   last_act = st.session_state.get('last_activity', now_ts)
@@ -555,10 +689,9 @@ if st.session_state.user_session:
     st.session_state.last_activity = now_ts
 
 
-# --- 4. MÀN HÌNH ĐĂNG NHẬP ---
+# --- MÀN HÌNH ĐĂNG NHẬP ---
 if not st.session_state.user_session:
   col_l1, col_center, col_l2 = st.columns([1, 2, 1])
-
   with col_center:
     st.markdown("<div class='login-box'>", unsafe_allow_html=True)
     st.title('🔐 ĐĂNG NHẬP HỆ THỐNG')
@@ -627,9 +760,8 @@ if not st.session_state.user_session:
   st.stop()
 
 
-# --- 5. HEADER BÊN PHẢI ---
+# --- HEADER BÊN PHẢI ---
 user = st.session_state.user_session
-
 head_col1, head_col2 = st.columns([3, 1])
 with head_col2:
   role_display = (
@@ -694,7 +826,6 @@ if user['role'] in ['teacher', 'admin']:
   # TAB 1: CHẤM BÀI THI
   with tabs[0]:
     st.subheader('📝 BẢNG CHẤM BÀI THI CỦA HỌC SINH')
-
     submission_files = [
         f for f in os.listdir(SUBMIT_FOLDER) if f.endswith('.json')
     ]
@@ -746,7 +877,6 @@ if user['role'] in ['teacher', 'admin']:
 
       if sel_subject and sel_subject != '-- Chọn Môn Học --':
         subs_by_sub = [d for d in raw_subs if d.get('subject') == sel_subject]
-
         if not subs_by_sub:
           st.warning(f'Chưa có bài nộp nào thuộc môn {sel_subject}.')
         else:
@@ -881,14 +1011,21 @@ if user['role'] in ['teacher', 'admin']:
                 new_essay_scores = []
 
                 if data.get('essay_details'):
+                  section_title = (
+                      'Trả lời ngắn'
+                      if data.get('subject') in SHORT_ANSWER_SUBJECTS
+                      else 'Tự luận'
+                  )
                   st.header(
-                      f'Chấm điểm Tự luận (Tổng tối đa phần Tự luận:'
+                      f'Chấm điểm phần {section_title} (Tổng tối đa:'
                       f' {max_essay_points}đ)'
                   )
                   for idx, item in enumerate(data['essay_details'], 1):
                     st.write(f'**Câu {idx}:** {item["question"]}')
-                    st.write(f'**Bài làm thí sinh:** {item["user_text"]}')
-                    st.write(f'**Gợi ý đáp án:** {item["sample_answer"]}')
+                    st.write(
+                        f'**Bài làm thí sinh:** `{item["user_text"] or "Bỏ trống"}`'
+                    )
+                    st.write(f'**Đáp án chuẩn:** `{item["sample_answer"]}`')
 
                     if is_graded and not edit_mode:
                       st.write(
@@ -931,8 +1068,8 @@ if user['role'] in ['teacher', 'admin']:
                     )
                     if sum_essay > max_essay_points and max_essay_points > 0:
                       st.error(
-                          f'❌ Tổng điểm tự luận ({sum_essay}đ) vượt quá điểm'
-                          f' tự luận cho phép ({max_essay_points}đ)!'
+                          f'❌ Tổng điểm phần này ({sum_essay}đ) vượt quá điểm'
+                          f' cho phép ({max_essay_points}đ)!'
                       )
                     else:
                       auto_score = float(data.get('auto_score', 0.0))
@@ -940,7 +1077,11 @@ if user['role'] in ['teacher', 'admin']:
                         for idx, new_sc in enumerate(new_essay_scores):
                           data['essay_details'][idx]['final_score'] = new_sc
 
-                      data['total_score'] = round(auto_score + sum_essay, 2)
+                      if data.get('subject') in SHORT_ANSWER_SUBJECTS:
+                        data['total_score'] = round(auto_score, 2)
+                      else:
+                        data['total_score'] = round(auto_score + sum_essay, 2)
+
                       data['teacher_note'] = teacher_note
                       data['is_graded'] = True
 
@@ -957,7 +1098,6 @@ if user['role'] in ['teacher', 'admin']:
   # TAB 2: THỐNG KÊ ĐIỂM BÀI THI
   with tabs[1]:
     st.subheader('📊 THỐNG KÊ KẾT QUẢ ĐIỂM THI')
-
     all_submissions = []
     for f_name in os.listdir(SUBMIT_FOLDER):
       if f_name.endswith('.json'):
@@ -1059,7 +1199,7 @@ if user['role'] in ['teacher', 'admin']:
               'Mã Đề': f.get('real_code'),
               'Tên Bài Thi': f.get('exam_title'),
               'Môn': f.get('subject'),
-              'Trắc Nghiệm': f.get('auto_score'),
+              'Điểm Tự Động': f.get('auto_score'),
               'Tổng Điểm': f.get('total_score'),
               'Trạng Thái': '🟢 Đã chấm' if is_graded else '⏳ Chờ chấm',
               'Thời Gian Nộp': f.get('timestamp'),
@@ -1069,36 +1209,65 @@ if user['role'] in ['teacher', 'admin']:
 
   # TAB 3: TẠO & QUẢN LÝ ĐỀ THI
   with tabs[2]:
-    st.subheader('📤 TẢI LÊN NGÂN HÀNG ĐỀ THI CỦA BẠN')
+    st.subheader('📤 TẢI LÊN & QUẢN LÝ NGÂN HÀNG ĐỀ THI')
+
     uploaded_bank = st.file_uploader(
-        'Chọn file câu hỏi Word (.docx) từ máy tính để tải lên hệ thống:',
+        'Chọn file câu hỏi Word (.docx) từ máy tính (Up trùng tên để SỬA / GHI'
+        ' ĐÈ file cũ):',
         type=['docx'],
+        key='bank_uploader',
     )
 
     if uploaded_bank is not None:
       saved_filename = f"{user['username']}_{uploaded_bank.name}"
       save_path = os.path.join(BANK_FOLDER, saved_filename)
+      is_overwrite = os.path.exists(save_path)
+
       with open(save_path, 'wb') as f:
         f.write(uploaded_bank.getbuffer())
-      st.success(f'✅ Đã tải lên file câu hỏi `{uploaded_bank.name}` thành công!')
-      st.rerun()
 
-    st.markdown('---')
-    st.subheader('➕ Tạo Đề Thi Mới')
+      parse_question_bank.clear()
+
+      if is_overwrite:
+        st.success(
+            f'🔄 Đã **CẬP NHẬT / GHI ĐÈ** thành công file `{uploaded_bank.name}`!'
+        )
+      else:
+        st.success(f'✅ Đã tải lên file mới `{uploaded_bank.name}` thành công!')
 
     raw_bank_files = [
         f for f in os.listdir(BANK_FOLDER) if f.endswith('.docx')
     ]
-
     if user['role'] == 'admin':
-      bank_files = raw_bank_files
+      my_bank_files = raw_bank_files
     else:
       prefix = f"{user['username']}_"
-      bank_files = [f for f in raw_bank_files if f.startswith(prefix)]
+      my_bank_files = [f for f in raw_bank_files if f.startswith(prefix)]
 
-    if not bank_files:
+    if my_bank_files:
+      with st.expander(
+          '🗂️ Quản Lý File Ngân Hàng Đề Của Bạn (Xem / Xóa file đã up)'
+      ):
+        for f_item in my_bank_files:
+          disp_name = (
+              f_item.split('_', 1)[-1] if '_' in f_item else f_item
+          )
+          col_f1, col_f2 = st.columns([4, 1])
+          with col_f1:
+            st.write(f'📄 **{disp_name}**')
+          with col_f2:
+            if st.button('🗑️ Xóa File', key=f'del_file_{f_item}'):
+              os.remove(os.path.join(BANK_FOLDER, f_item))
+              parse_question_bank.clear()
+              st.toast(f'Đã xóa file {disp_name}')
+              st.rerun()
+
+    st.markdown('---')
+    st.subheader('➕ Tạo Đề Thi Mới')
+
+    if not my_bank_files:
       st.warning(
-          '💡 Bạn chưa có file ngân hàng đề thi nào. Hãy dùng nút **Tải lên**'
+          '💡 Bạn chưa có file ngân hàng đề thi nào. Hãy dùng nút **Upload**'
           ' bên trên để đưa file Word (.docx) của bạn vào hệ thống!'
       )
     else:
@@ -1117,7 +1286,9 @@ if user['role'] in ['teacher', 'admin']:
           ex_subject = st.selectbox(
               'Môn học:', options=list(SUBJECT_PREFIXES.keys())
           )
-          target_class = st.text_input('Lớp áp dụng (VD: 10A1 hoặc ALL):', value='10A1')
+          target_class = st.text_input(
+              'Lớp áp dụng (VD: 10A1 hoặc ALL):', value='10A1'
+          )
 
         auto_code = generate_exam_code(ex_subject, exams_db)
         ex_code = st.text_input('Mã bài thi (Tự động):', value=auto_code)
@@ -1133,7 +1304,7 @@ if user['role'] in ['teacher', 'admin']:
 
       with c2:
         display_map = {
-            (f.split('_', 1)[-1] if '_' in f else f): f for f in bank_files
+            (f.split('_', 1)[-1] if '_' in f else f): f for f in my_bank_files
         }
         selected_display = st.selectbox(
             'Chọn File Ngân hàng đề của bạn:', list(display_map.keys())
@@ -1142,6 +1313,15 @@ if user['role'] in ['teacher', 'admin']:
 
         mcq_p, tf_p, es_p = parse_question_bank(
             os.path.join(BANK_FOLDER, selected_bank)
+        )
+
+        all_pool = mcq_p + tf_p + es_p
+        chap_set = set(q.get('chapter', 'Chương 1') for q in all_pool)
+        level_set = set(q.get('level', 'Thông hiểu') for q in all_pool)
+        st.caption(
+            f'📊 **Thống kê ma trận file:** {len(all_pool)} câu |'
+            f' {len(chap_set)} Chương | Các mức độ:'
+            f' {", ".join(sorted(level_set))}'
         )
 
         num_mcq_input = st.number_input(
@@ -1156,8 +1336,15 @@ if user['role'] in ['teacher', 'admin']:
             max_value=len(tf_p),
             value=min(2, len(tf_p)),
         )
+
+        essay_label = (
+            'Trả lời ngắn' if ex_subject in SHORT_ANSWER_SUBJECTS else 'Tự luận'
+        )
         num_es_input = st.number_input(
-            'Số câu Tự luận:', min_value=0, max_value=len(es_p), value=0
+            f'Số câu {essay_label}:',
+            min_value=0,
+            max_value=len(es_p),
+            value=min(2, len(es_p)),
         )
         duration_input = st.number_input('Thời gian làm bài (Phút):', 1, 180, 45)
 
@@ -1190,7 +1377,7 @@ if user['role'] in ['teacher', 'admin']:
         mcq_points, essay_points = remaining_pts, 0.0
       else:
         essay_points = st.number_input(
-            f'Nhập tổng điểm Tự luận (Tối đa {remaining_pts}đ):',
+            f'Nhập tổng điểm phần {essay_label} (Tối đa {remaining_pts}đ):',
             min_value=0.0,
             max_value=remaining_pts,
             value=min(3.0, remaining_pts),
@@ -1201,7 +1388,7 @@ if user['role'] in ['teacher', 'admin']:
 
       st.info(
           f'📊 **Cơ cấu điểm đề thi:** Trắc nghiệm: **{mcq_points}đ** | Đúng/Sai:'
-          f' **{tf_points}đ** | Tự luận: **{essay_points}đ** (Tổng: 10.0đ)'
+          f' **{tf_points}đ** | {essay_label}: **{essay_points}đ** (Tổng: 10.0đ)'
       )
 
       if st.button('💾 Tạo Đề Thi'):
@@ -1252,6 +1439,11 @@ if user['role'] in ['teacher', 'admin']:
           visible_exam_items, key=lambda x: x[1].get('code', '')
       ):
         ex_code_disp = ex_info.get('code', 'DE')
+        e_lbl = (
+            'Trả lời ngắn'
+            if ex_info.get('subject') in SHORT_ANSWER_SUBJECTS
+            else 'Tự luận'
+        )
         with st.expander(
             f"📌 [{ex_code_disp}] {ex_info['title']}"
             f" ({ex_info.get('exam_type','Thường xuyên')}) - Môn:"
@@ -1267,7 +1459,7 @@ if user['role'] in ['teacher', 'admin']:
               f"⚙️ **Cấu trúc:** {ex_info.get('num_mcq',0)} câu Trắc nghiệm"
               f" ({ex_info.get('mcq_points',0)}đ) | {ex_info.get('num_tf',0)} câu"
               f" Đúng/Sai ({ex_info.get('tf_points',0)}đ) |"
-              f" {ex_info.get('num_essay',0)} câu Tự luận"
+              f" {ex_info.get('num_essay',0)} câu {e_lbl}"
               f" ({ex_info.get('essay_points',0)}đ)"
           )
 
@@ -1306,7 +1498,14 @@ if user['role'] in ['teacher', 'admin']:
             if mcq_p and ex_info.get('num_mcq', 0) > 0:
               st.write('**I. Phần Trắc Nghiệm:**')
               for idx, q in enumerate(mcq_p[: ex_info['num_mcq']], 1):
-                st.write(f"**Câu {idx}:** {q['question']}")
+                st.write(
+                    f"**Câu {idx} [{q.get('chapter')}] [{q.get('level')}]:**"
+                    f" {q['question']}"
+                )
+                if q.get('images'):
+                  for img_p in q['images']:
+                    if os.path.exists(img_p):
+                      st.image(img_p, width=400)
                 for opt in q.get('options', []):
                   mark = ' ✅ (Đáp án đúng)' if opt.get('is_correct') else ''
                   st.write(f"- {opt['text']}{mark}")
@@ -1314,17 +1513,31 @@ if user['role'] in ['teacher', 'admin']:
             if tf_p and ex_info.get('num_tf', 0) > 0:
               st.write('**II. Phần Đúng / Sai:**')
               for idx, q in enumerate(tf_p[: ex_info['num_tf']], 1):
-                st.write(f"**Câu {idx}:** {q['question']}")
+                st.write(
+                    f"**Câu {idx} [{q.get('chapter')}] [{q.get('level')}]:**"
+                    f" {q['question']}"
+                )
+                if q.get('images'):
+                  for img_p in q['images']:
+                    if os.path.exists(img_p):
+                      st.image(img_p, width=400)
                 for sub in q.get('sub_items', []):
                   ans_str = 'ĐÚNG' if sub.get('answer') else 'SAI'
                   st.write(f"- {sub['text']} -> **[{ans_str}]**")
 
             if es_p and ex_info.get('num_essay', 0) > 0:
-              st.write('**III. Phần Tự Luận:**')
+              st.write(f'**III. Phần {e_lbl}:**')
               for idx, q in enumerate(es_p[: ex_info['num_essay']], 1):
-                st.write(f"**Câu {idx}:** {q['question']}")
+                st.write(
+                    f"**Câu {idx} [{q.get('chapter')}] [{q.get('level')}]:**"
+                    f" {q['question']}"
+                )
+                if q.get('images'):
+                  for img_p in q['images']:
+                    if os.path.exists(img_p):
+                      st.image(img_p, width=400)
                 if q.get('sample_answer'):
-                  st.write(f"  *Gợi ý đáp án:* {q['sample_answer']}")
+                  st.write(f"  *Đáp án chuẩn:* `{q['sample_answer']}`")
 
           if st.session_state.get(show_st_key, False):
             st.markdown('---')
@@ -1368,7 +1581,7 @@ if user['role'] in ['teacher', 'admin']:
                 tbl_data.append({
                     'Mã HS': s.get('student_id'),
                     'Họ Tên': s.get('student_name'),
-                    'Trắc Nghiệm': s.get('auto_score'),
+                    'Điểm Tự Động': s.get('auto_score'),
                     'Tổng Điểm': s.get('total_score'),
                     'Trạng Thái': (
                         '🟢 Đã chấm' if s.get('is_graded', True) else '⏳ Chờ chấm'
@@ -1380,7 +1593,6 @@ if user['role'] in ['teacher', 'admin']:
   # TAB 4: QUẢN LÝ LỚP HỌC & HỌC SINH
   with tabs[3]:
     st.subheader('🏫 QUẢN LÝ LỚP HỌC & HỌC SINH')
-
     all_students = [
         k for k, v in users_db.items() if v.get('role') == 'student'
     ]
@@ -1441,11 +1653,9 @@ if user['role'] in ['teacher', 'admin']:
     else:
       st.info(f'Chưa có học sinh nào trong lớp {selected_class_view}.')
 
-  # TAB 5: QUẢN LÝ GIÁO VIÊN & SAO LƯU DỮ LIỆU CÁC TÀI KHOẢN (CHO ADMIN VÀ TRƯỞNG BỘ MÔN)
+  # TAB 5: QUẢN LÝ GIÁO VIÊN & SAO LƯU DỮ LIỆU
   if user['role'] == 'admin' or user.get('is_head'):
     with tabs[4]:
-
-      # KHU VỰC TẢI & KHÔI PHỤC DỮ LIỆU DÀNH CHO ADMIN
       if user['role'] == 'admin':
         st.subheader('💾 SAO LƯU & KHÔI PHỤC DANH SÁCH TÀI KHOẢN (AN TOÀN)')
 
@@ -1479,8 +1689,6 @@ if user['role'] in ['teacher', 'admin']:
               st.error(f'❌ File không hợp lệ: {e}')
 
         st.markdown('---')
-
-      if user['role'] == 'admin':
         st.subheader('🎲 PHÂN CÔNG NGẪU NHIÊN CHẤM THI CUỐI KỲ')
 
         if st.button('⚡ Phân Công Ngẫu Nhiên Tất Cả Bài Thi Cuối Kỳ'):
@@ -1519,7 +1727,6 @@ if user['role'] in ['teacher', 'admin']:
         st.markdown('---')
 
       st.subheader('📋 DANH SÁCH GIÁO VIÊN TRONG HỆ THỐNG')
-
       teacher_table = []
       for gv_id, gv_info in users_db.items():
         if gv_info.get('role') == 'teacher':
@@ -1631,11 +1838,16 @@ if user['role'] in ['teacher', 'admin']:
 # ==================== GIAO DIỆN HỌC SINH ====================
 elif user['role'] == 'student':
 
-  # --- SIDEBAR BÊN TRÁI CỦA HỌC SINH ---
+  # SIDEBAR HỌC SINH
   with st.sidebar:
     if st.session_state.get('exam_started', False):
       exam = st.session_state.exam_data
       exam_info = st.session_state.current_exam_info
+      e_label = (
+          'Trả Lời Ngắn'
+          if exam_info.get('subject') in SHORT_ANSWER_SUBJECTS
+          else 'Tự Luận'
+      )
 
       start_time_ts = st.session_state.get('start_time', time.time())
       duration_seconds = exam_info['duration'] * 60
@@ -1713,7 +1925,7 @@ elif user['role'] == 'student':
         st.markdown(nav_html_tf, unsafe_allow_html=True)
 
       if exam['essay']:
-        st.write('**III. Tự Luận**')
+        st.write(f'**III. {e_label}**')
         nav_html_es = "<div style='display: flex; flex-wrap: wrap; gap: 6px;'>"
         for idx in range(1, len(exam['essay']) + 1):
           is_ans = bool(st.session_state.get(f'essay_{idx}', '').strip())
@@ -1767,7 +1979,7 @@ elif user['role'] == 'student':
       if summary_list:
         st.dataframe(summary_list, use_container_width=True, hide_index=True)
 
-  # --- MÀN HÌNH KẾT QUẢ SAU KHI NỘP BÀI ---
+  # KẾT QUẢ SAU KHI NỘP BÀI
   if st.session_state.submitted_data:
     res = st.session_state.submitted_data
     st.balloons()
@@ -1780,8 +1992,8 @@ elif user['role'] == 'student':
             <hr>
             <p style="font-size: 18px;"><b>Môn học:</b> {res['subject']} | <b>Mã bài thi:</b> {res['exam_code']}</p>
             <p style="font-size: 18px;"><b>Thời gian nộp bài:</b> {res['timestamp']}</p>
-            <p style="font-size: 18px;"><b>Số câu làm đúng (Trắc nghiệm & Đúng Sai):</b> <span style="color: #28a745; font-weight: bold;">{res['correct_count']} câu</span></p>
-            <p style="font-size: 22px;"><b>Điểm trắc nghiệm / đúng sai:</b> <span style="color: #d9534f; font-weight: bold;">{res['auto_score']} Điểm</span></p>
+            <p style="font-size: 18px;"><b>Số câu làm đúng:</b> <span style="color: #28a745; font-weight: bold;">{res['correct_count']} câu</span></p>
+            <p style="font-size: 22px;"><b>Tổng điểm đạt được:</b> <span style="color: #d9534f; font-weight: bold;">{res['total_score']} Điểm</span></p>
         </div>
     """,
         unsafe_allow_html=True,
@@ -1796,7 +2008,7 @@ elif user['role'] == 'student':
 
     st.stop()
 
-  # --- MÀN HÌNH ĐỘC LẬP: CỬA SỔ XÁC NHẬN VÀO THI CHÍNH GIỮA ---
+  # CỬA SỔ XÁC NHẬN VÀO THI
   if not st.session_state.get('exam_started', False) and st.session_state.get(
       'confirm_exam_id'
   ):
@@ -1859,20 +2071,14 @@ elif user['role'] == 'student':
               )
               random.seed(int(time.time() * 1000) + hash(user['username']))
 
-              selected_mcq = (
-                  random.sample(mcq_p, min(exam_info['num_mcq'], len(mcq_p)))
-                  if exam_info['num_mcq'] > 0
-                  else []
+              selected_mcq = sample_questions_balanced(
+                  mcq_p, exam_info['num_mcq']
               )
-              selected_tf = (
-                  random.sample(tf_p, min(exam_info['num_tf'], len(tf_p)))
-                  if exam_info['num_tf'] > 0
-                  else []
+              selected_tf = sample_questions_balanced(
+                  tf_p, exam_info['num_tf']
               )
-              selected_essay = (
-                  random.sample(es_p, min(exam_info['num_essay'], len(es_p)))
-                  if exam_info['num_essay'] > 0
-                  else []
+              selected_essay = sample_questions_balanced(
+                  es_p, exam_info['num_essay']
               )
 
               for q in selected_mcq:
@@ -1922,20 +2128,14 @@ elif user['role'] == 'student':
               )
               random.seed(int(time.time() * 1000) + hash(user['username']))
 
-              selected_mcq = (
-                  random.sample(mcq_p, min(exam_info['num_mcq'], len(mcq_p)))
-                  if exam_info['num_mcq'] > 0
-                  else []
+              selected_mcq = sample_questions_balanced(
+                  mcq_p, exam_info['num_mcq']
               )
-              selected_tf = (
-                  random.sample(tf_p, min(exam_info['num_tf'], len(tf_p)))
-                  if exam_info['num_tf'] > 0
-                  else []
+              selected_tf = sample_questions_balanced(
+                  tf_p, exam_info['num_tf']
               )
-              selected_essay = (
-                  random.sample(es_p, min(exam_info['num_essay'], len(es_p)))
-                  if exam_info['num_essay'] > 0
-                  else []
+              selected_essay = sample_questions_balanced(
+                  es_p, exam_info['num_essay']
               )
 
               for q in selected_mcq:
@@ -1963,12 +2163,11 @@ elif user['role'] == 'student':
 
     st.stop()
 
-  # --- DANH SÁCH ĐỀ THI CỦA HỌC SINH ---
+  # DANH SÁCH ĐỀ THI BÊN HỌC SINH
   if not st.session_state.get('exam_started', False):
     st.title(
         f"📝 DANH SÁCH ĐỀ THI - {selected_subject.upper() if selected_subject != 'Tất cả môn' else 'TẤT CẢ MÔN'}"
     )
-
     student_class = user.get('class_name', '')
 
     visible_exams = {}
@@ -2008,7 +2207,6 @@ elif user['role'] == 'student':
       st.stop()
 
     st.markdown('---')
-
     now_dt = datetime.datetime.now()
 
     def exam_sort_key(ex_id):
@@ -2122,9 +2320,10 @@ elif user['role'] == 'student':
 
     st.stop()
 
-  # --- MÀN HÌNH ĐANG LÀM BÀI THI ---
+  # MÀN HÌNH ĐANG LÀM BÀI THI CỦA HỌC SINH
   exam = st.session_state.exam_data
   exam_info = st.session_state.current_exam_info
+  is_short_ans_subj = exam_info.get('subject') in SHORT_ANSWER_SUBJECTS
 
   st.subheader(
       f"📝 [{exam_info.get('code','DE')}] {exam_info['title']} - Môn:"
@@ -2138,6 +2337,12 @@ elif user['role'] == 'student':
       for idx, q in enumerate(exam['mcq'], 1):
         st.markdown(f'<div id="q_mcq_{idx}"></div>', unsafe_allow_html=True)
         st.subheader(f'Câu {idx}: {q["question"]}')
+
+        if q.get('images'):
+          for img_p in q['images']:
+            if os.path.exists(img_p):
+              st.image(img_p, width=450)
+
         opts = st.session_state.get(f'mcq_opts_{q["id"]}', [])
         user_mcq[idx] = st.radio(
             'Chọn đáp án:', opts, key=f'mcq_{idx}', index=None
@@ -2149,6 +2354,12 @@ elif user['role'] == 'student':
       for idx, q in enumerate(exam['tf'], 1):
         st.markdown(f'<div id="q_tf_{idx}"></div>', unsafe_allow_html=True)
         st.subheader(f'Câu {idx}: {q["question"]}')
+
+        if q.get('images'):
+          for img_p in q['images']:
+            if os.path.exists(img_p):
+              st.image(img_p, width=450)
+
         user_tf[idx] = []
         for sub_idx, sub_item in enumerate(q.get('sub_items', [])):
           ans = st.radio(
@@ -2162,13 +2373,25 @@ elif user['role'] == 'student':
 
     user_essay = {}
     if exam['essay']:
-      st.header('III. Tự Luận')
+      section_title = 'III. Trả Lời Ngắn' if is_short_ans_subj else 'III. Tự Luận'
+      st.header(section_title)
       for idx, q in enumerate(exam['essay'], 1):
         st.markdown(f'<div id="q_essay_{idx}"></div>', unsafe_allow_html=True)
         st.subheader(f'Câu {idx}: {q["question"]}')
-        user_essay[idx] = st.text_area(
-            'Bài làm:', key=f'essay_{idx}', height=120
-        )
+
+        if q.get('images'):
+          for img_p in q['images']:
+            if os.path.exists(img_p):
+              st.image(img_p, width=450)
+
+        if is_short_ans_subj:
+          user_essay[idx] = st.text_input(
+              'Nhập đáp án (VD: 4.5 hoặc 4,5):', key=f'essay_{idx}'
+          )
+        else:
+          user_essay[idx] = st.text_area(
+              'Bài làm:', key=f'essay_{idx}', height=120
+          )
 
     save_student_draft(
         user['username'],
@@ -2185,7 +2408,7 @@ elif user['role'] == 'student':
 
     submit_btn = st.form_submit_button('📥 Nộp Bài Cho Giáo Viên')
 
-  # --- XỬ LÝ NỘP BÀI THẬT ---
+  # XỬ LÝ NỘP BÀI THẬT
   if submit_btn:
     delete_student_draft(user['username'], exam_info.get('code', 'DE'))
 
@@ -2232,17 +2455,47 @@ elif user['role'] == 'student':
         })
 
     essay_details = []
+    essay_score = 0.0
+    essay_pts = float(exam_info.get('essay_points', 0.0))
+    essay_unit = essay_pts / len(exam['essay']) if exam['essay'] else 0.0
+
     if exam['essay']:
       for idx, q in enumerate(exam['essay'], 1):
-        u_txt = user_essay.get(idx, '')
-        essay_details.append({
-            'question': q['question'],
-            'user_text': u_txt,
-            'sample_answer': q['sample_answer'],
-            'final_score': 0.0,
-        })
+        u_txt = user_essay.get(idx, '').strip()
+        sample_ans = q.get('sample_answer', '').strip()
 
-    auto_score = round(mcq_score + tf_score, 2)
+        if is_short_ans_subj:
+          is_correct = check_short_answer(u_txt, sample_ans)
+          q_score = essay_unit if is_correct else 0.0
+          if is_correct:
+            correct_cnt += 1
+            essay_score += q_score
+          essay_details.append({
+              'question': q['question'],
+              'user_text': u_txt,
+              'sample_answer': sample_ans,
+              'final_score': q_score,
+              'is_correct': is_correct,
+          })
+        else:
+          essay_details.append({
+              'question': q['question'],
+              'user_text': u_txt,
+              'sample_answer': sample_ans,
+              'final_score': 0.0,
+          })
+
+    if is_short_ans_subj:
+      auto_score = round(mcq_score + tf_score + essay_score, 2)
+      total_score = auto_score
+      is_fully_graded = True
+    else:
+      auto_score = round(mcq_score + tf_score, 2)
+      total_score = auto_score
+      is_fully_graded = (
+          False if float(exam_info.get('essay_points', 0)) > 0 else True
+      )
+
     timestamp = datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')
 
     submission_data = {
@@ -2260,16 +2513,14 @@ elif user['role'] == 'student':
         ),
         'timestamp': timestamp,
         'auto_score': auto_score,
-        'total_score': auto_score,
+        'total_score': total_score,
         'correct_count': correct_cnt,
-        'essay_points': float(exam_info.get('essay_points', 0.0)),
+        'essay_points': essay_pts,
         'mcq_details': mcq_details,
         'tf_details': tf_details,
         'essay_details': essay_details,
         'teacher_note': '',
-        'is_graded': (
-            False if exam_info.get('essay_points', 0) > 0 else True
-        ),
+        'is_graded': is_fully_graded,
     }
 
     file_name = f'{user["username"]}_{int(time.time())}.json'
