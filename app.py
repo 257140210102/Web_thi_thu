@@ -35,7 +35,7 @@ SUBJECT_PREFIXES = {
 }
 
 
-# --- ĐỊNH DẠNG VÀ KIỂM TRA MẬT KHẨU (GỒM CHỮ + SỐ VÀ >= 8 KÝ TỰ) ---
+# --- ĐỊNH DẠNG VÀ KIỂM TRA MẬT KHẨU ---
 def validate_password(password):
   """Kiểm tra mật khẩu có từ 8 ký tự trở lên và bao gồm cả chữ và số."""
   if len(password) < 8:
@@ -437,13 +437,12 @@ def grade_tf(user_answers, correct_answers):
   return score_map.get(correct_count, 0.0), correct_count
 
 
-# --- 3. GIAO DIỆN & STYLE KHUNG MODAL GIỮA MÀN HÌNH ---
+# --- 3. GIAO DIỆN & STYLE ---
 st.set_page_config(page_title='Hệ Thống Thi Thử Trực Tuyến', layout='wide')
 
 st.markdown(
     """
     <style>
-    /* Phông chữ chuẩn Arial */
     html, body, p, label, input, textarea {
         font-family: 'Arial', sans-serif !important;
     }
@@ -1068,7 +1067,7 @@ if user['role'] in ['teacher', 'admin']:
 
         st.dataframe(table_data, use_container_width=True)
 
-  # TAB 3: TẠO & QUẢN LÝ ĐỀ THI (ĐÃ BỔ SUNG TẢI LÊN VÀ PHÂN QUYỀN RIÊNG TƯ)
+  # TAB 3: TẠO & QUẢN LÝ ĐỀ THI
   with tabs[2]:
     st.subheader('📤 TẢI LÊN NGÂN HÀNG ĐỀ THI CỦA BẠN')
     uploaded_bank = st.file_uploader(
@@ -1077,7 +1076,6 @@ if user['role'] in ['teacher', 'admin']:
     )
 
     if uploaded_bank is not None:
-      # Tự động gán tiền tố username_ để bảo mật riêng tư
       saved_filename = f"{user['username']}_{uploaded_bank.name}"
       save_path = os.path.join(BANK_FOLDER, saved_filename)
       with open(save_path, 'wb') as f:
@@ -1088,7 +1086,6 @@ if user['role'] in ['teacher', 'admin']:
     st.markdown('---')
     st.subheader('➕ Tạo Đề Thi Mới')
 
-    # Lọc danh sách file theo quyền riêng tư (Giáo viên chỉ thấy file của chính mình, Admin thấy hết)
     raw_bank_files = [
         f for f in os.listdir(BANK_FOLDER) if f.endswith('.docx')
     ]
@@ -1135,7 +1132,6 @@ if user['role'] in ['teacher', 'admin']:
         max_attempts_input = st.number_input('Số lần làm bài tối đa:', 1, 10, 1)
 
       with c2:
-        # Hiển thị tên file đẹp bằng cách bỏ bớt tiền tố username
         display_map = {
             (f.split('_', 1)[-1] if '_' in f else f): f for f in bank_files
         }
@@ -1445,9 +1441,45 @@ if user['role'] in ['teacher', 'admin']:
     else:
       st.info(f'Chưa có học sinh nào trong lớp {selected_class_view}.')
 
-  # TAB 5: QUẢN LÝ GIÁO VIÊN (CHO ADMIN VÀ TRƯỞNG BỘ MÔN)
+  # TAB 5: QUẢN LÝ GIÁO VIÊN & SAO LƯU DỮ LIỆU CÁC TÀI KHOẢN (CHO ADMIN VÀ TRƯỞNG BỘ MÔN)
   if user['role'] == 'admin' or user.get('is_head'):
     with tabs[4]:
+
+      # KHU VỰC TẢI & KHÔI PHỤC DỮ LIỆU DÀNH CHO ADMIN
+      if user['role'] == 'admin':
+        st.subheader('💾 SAO LƯU & KHÔI PHỤC DANH SÁCH TÀI KHOẢN (AN TOÀN)')
+
+        bk_col1, bk_col2 = st.columns(2)
+        with bk_col1:
+          st.write('**1. Tải về File sao lưu người dùng (`users.json`):**')
+          users_json_bytes = json.dumps(
+              users_db, ensure_ascii=False, indent=4
+          ).encode('utf-8')
+          st.download_button(
+              label='📥 Tải Về File Sao Lưu users.json',
+              data=users_json_bytes,
+              file_name='users.json',
+              mime='application/json',
+          )
+
+        with bk_col2:
+          st.write('**2. Khôi phục từ File sao lưu máy tính:**')
+          restore_file = st.file_uploader(
+              'Chọn file users.json từ máy tính:',
+              type=['json'],
+              key='restore_uploader',
+          )
+          if restore_file is not None:
+            try:
+              imported_users = json.load(restore_file)
+              save_users(imported_users)
+              st.success('✅ Đã khôi phục toàn bộ danh sách người dùng!')
+              st.rerun()
+            except Exception as e:
+              st.error(f'❌ File không hợp lệ: {e}')
+
+        st.markdown('---')
+
       if user['role'] == 'admin':
         st.subheader('🎲 PHÂN CÔNG NGẪU NHIÊN CHẤM THI CUỐI KỲ')
 
