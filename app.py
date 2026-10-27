@@ -2434,3 +2434,4 @@ elif user['role'] == 'student':
     st.session_state.submitted_data = submission_data
     st.session_state.exam_started = False
     st.rerun()
+    
