@@ -1715,24 +1715,6 @@ if user['role'] in ['teacher', 'admin']:
   if user['role'] == 'admin' or user.get('is_head'):
     with tabs[4]:
       st.subheader('📋 DANH SÁCH GIÁO VIÊN TRONG HỆ THỐNG')
-      with st.expander('📥 Tải Lên / Import File users.json Có Sẵn'):
-        uploaded_users_file = st.file_uploader(
-            'Chọn file users.json từ máy tính của bạn:',
-            type=['json'],
-            key='upload_users_json_key',
-        )
-        if uploaded_users_file is not None:
-          try:
-            imported_users = json.load(uploaded_users_file)
-            if isinstance(imported_users, dict):
-              users_db.update(imported_users)
-              save_users(users_db)
-              st.toast('✅ Đã tải lên và cập nhật file users.json thành công!')
-              st.rerun()
-            else:
-              st.error('❌ Định dạng file JSON không hợp lệ!')
-          except Exception as e:
-            st.error(f'❌ Lỗi đọc file JSON: {e}')
       teacher_table = []
       for gv_id, gv_info in users_db.items():
         if gv_info.get('role') == 'teacher':
@@ -1758,58 +1740,120 @@ if user['role'] in ['teacher', 'admin']:
       st.markdown('---')
 
       # KHÔI PHỤC PHẦN "THÊM GIÁO VIÊN MỚI"
-      with st.expander('➕ Thêm Giáo Viên Mới'):
-        col_add1, col_add2 = st.columns(2)
-        with col_add1:
-          new_gv_id = st.text_input('Mã GV / Tên đăng nhập:', key='add_gv_id')
-          new_gv_name = st.text_input('Họ và Tên:', key='add_gv_name')
-          new_gv_pass = st.text_input(
-              'Mật khẩu ban đầu:',
-              value='123',
-              type='password',
-              key='add_gv_pass',
-          )
-        with col_add2:
-          new_gv_subject = st.selectbox(
-              'Môn Học Giảng Dạy:',
-              options=list(SUBJECT_PREFIXES.keys()),
-              key='add_gv_subj',
-          )
-          new_gv_classes = st.text_input(
-              'Các Lớp Quản Lý (phân cách bằng dấu phẩy, VD: 10A1, 10A2):',
-              value='10A1',
-              key='add_gv_classes',
-          )
-          new_gv_contact = st.text_input('SĐT / Email:', key='add_gv_contact')
-          is_head_dept = st.checkbox(
-              'Là Trưởng Bộ Môn?', key='add_gv_is_head'
-          )
+      with st.expander("➕ Thêm Giáo Viên Mới"):
+          exp_ex, exp_man = st.tabs([
+              "📊 Nhập Từ File",
+              "➕ Thêm Thủ Công 1 Giáo Viên"
+          ])
 
-        if st.button(
-            '➕ Thêm Giáo Viên', type='primary', key='btn_add_gv_submit'
-        ):
-          if not new_gv_id or not new_gv_name:
-            st.error('❌ Vui lòng điền đầy đủ Mã GV và Họ tên!')
-          elif new_gv_id in users_db:
-            st.error('❌ Mã Giáo viên / Tên đăng nhập này đã tồn tại!')
-          else:
-            managed_list = [
-                c.strip() for c in new_gv_classes.split(',') if c.strip()
-            ]
-            users_db[new_gv_id] = {
-                'name': new_gv_name,
-                'password': new_gv_pass if new_gv_pass else '123',
-                'role': 'teacher',
-                'is_head': is_head_dept,
-                'subject': new_gv_subject,
-                'managed_classes': managed_list,
-                'contact': new_gv_contact,
-            }
-            save_users(users_db)
-            st.toast(f'✅ Đã thêm giáo viên {new_gv_name} thành công!')
-            st.rerun()
+          # TAB 1: IMPORT FILE JSON
+          with exp_ex:
+              uploaded_users_file = st.file_uploader(
+                  "Chọn file users.json từ máy tính:",
+                  type=["json"],
+                  key="upload_users_json_key",
+              )
 
-      st.markdown('---')
+              if uploaded_users_file is not None:
+                  try:
+                      imported_users = json.load(uploaded_users_file)
+
+                      if isinstance(imported_users, dict):
+                          # Kiểm tra mã giáo viên trước khi cập nhật
+                          duplicates = set(imported_users) & set(users_db)
+
+                          if duplicates:
+                              st.warning(
+                                  "Các tài khoản đã tồn tại sẽ được cập nhật: "
+                                  + ", ".join(duplicates)
+                              )
+
+                          users_db.update(imported_users)
+                          save_users(users_db)
+
+                          st.success("Đã import users.json thành công!")
+                          st.rerun()
+                      else:
+                          st.error("Định dạng file JSON không hợp lệ!")
+
+                  except json.JSONDecodeError:
+                      st.error("File JSON bị lỗi định dạng!")
+                  except Exception as e:
+                      st.error(f"Lỗi đọc file JSON: {e}")
+
+          # TAB 2: THÊM THỦ CÔNG
+          with exp_man:
+              col_add1, col_add2 = st.columns(2)
+
+              with col_add1:
+                  new_gv_id = st.text_input(
+                      "Mã GV / Tên đăng nhập:",
+                      key="add_gv_id"
+                  )
+                  new_gv_name = st.text_input(
+                      "Họ và Tên:",
+                      key="add_gv_name"
+                  )
+                  new_gv_pass = st.text_input(
+                      "Mật khẩu ban đầu:",
+                      value="123",
+                      type="password",
+                      key="add_gv_pass",
+                  )
+
+              with col_add2:
+                  new_gv_subject = st.selectbox(
+                      "Môn Học Giảng Dạy:",
+                      options=list(SUBJECT_PREFIXES.keys()),
+                      key="add_gv_subj",
+                  )
+                  new_gv_classes = st.text_input(
+                      "Các Lớp Quản Lý:",
+                      value="10A1",
+                      key="add_gv_classes",
+                  )
+                  new_gv_contact = st.text_input(
+                      "SĐT / Email:",
+                      key="add_gv_contact"
+                  )
+                  is_head_dept = st.checkbox(
+                      "Là Trưởng Bộ Môn?",
+                      key="add_gv_is_head"
+                  )
+
+              if st.button(
+                  "➕ Thêm Giáo Viên",
+                  type="primary",
+                  key="btn_add_gv_submit"
+              ):
+                  if not new_gv_id.strip() or not new_gv_name.strip():
+                      st.error("Vui lòng điền đầy đủ Mã GV và Họ tên!")
+                  elif new_gv_id.strip() in users_db:
+                      st.error("Mã giáo viên / Tên đăng nhập đã tồn tại!")
+                  else:
+                      managed_list = [
+                          c.strip()
+                          for c in new_gv_classes.split(",")
+                          if c.strip()
+                      ]
+
+                      users_db[new_gv_id.strip()] = {
+                          "name": new_gv_name.strip(),
+                          "password": new_gv_pass or "123",
+                          "role": "teacher",
+                          "is_head": is_head_dept,
+                          "subject": new_gv_subject,
+                          "managed_classes": managed_list,
+                          "contact": new_gv_contact.strip(),
+                      }
+
+                      save_users(users_db)
+                      st.success(
+                          f"Đã thêm giáo viên {new_gv_name} thành công!"
+                      )
+                      st.rerun()
+
+      st.markdown("---")
       st.subheader('✏️ CẬP NHẬT MÔN HỌC & LỚP QUẢN LÝ CHO GIÁO VIÊN')
 
       editable_teachers = {
