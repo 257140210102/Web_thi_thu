@@ -41,31 +41,26 @@ SUBJECT_PREFIXES = {
 }
 
 
-# --- HÀM SO SÁNH ĐÁP ÁN TRẢ LỜI NGẮN (CHẤP NHẬN CẢ DẤU . VÀ DẤU ,) ---
+# --- HÀM SO SÁNH ĐÁP ÁN TRẢ LỜI NGẮN ---
 def check_short_answer(user_ans, correct_ans):
   if user_ans is None or correct_ans is None:
     return False
-
   u_str = str(user_ans).strip().replace(' ', '')
   c_str = str(correct_ans).strip().replace(' ', '')
-
   if not u_str or not c_str:
     return False
-
   u_norm = u_str.replace(',', '.')
   c_norm = c_str.replace(',', '.')
-
   try:
     u_num = float(u_norm)
     c_num = float(c_norm)
     return abs(u_num - c_num) < 1e-6
   except ValueError:
     pass
-
   return u_norm.lower() == c_norm.lower()
 
 
-# --- THUẬT TOÁN RÚT ĐỀ PHÂN BỐ ĐỀU THEO MA TRẬN CHƯƠNG & MỨC ĐỘ ---
+# --- THUẬT TOÁN RÚT ĐỀ PHÂN BỐ ĐỀU ---
 def sample_questions_balanced(question_pool, total_needed):
   if not question_pool or total_needed <= 0:
     return []
@@ -76,10 +71,7 @@ def sample_questions_balanced(question_pool, total_needed):
 
   groups = {}
   for q in question_pool:
-    key = (
-        q.get('chapter', 'Chương 1'),
-        q.get('level', 'Thông hiểu'),
-    )
+    key = (q.get('chapter', 'Chương 1'), q.get('level', 'Thông hiểu'))
     groups.setdefault(key, []).append(q)
 
   for key in groups:
@@ -97,11 +89,9 @@ def sample_questions_balanced(question_pool, total_needed):
         added = True
     if not added:
       break
-
   return selected
 
 
-# --- KIỂM TRA ĐỊNH DẠNG MẬT KHẨU ---
 def validate_password(password):
   if len(password) < 8:
     return False, '❌ Mật khẩu phải có từ 8 ký tự trở lên!'
@@ -159,10 +149,8 @@ def get_real_exam_code(submission_data, exams_db):
     prefix = SUBJECT_PREFIXES.get(subj, '')
     if prefix and code.startswith(prefix):
       return code
-
   if code and code != 'DE':
     return code
-
   return 'DE'
 
 
@@ -180,12 +168,12 @@ def load_users():
             'contact': 'admin@school.edu.vn',
         },
         'gv_van1': {
-            'name': 'Cô Phạm Thị Văn (Trưởng bộ môn)',
+            'name': 'Cô Phạm Thị Văn',
             'password': '123',
             'role': 'teacher',
             'is_head': True,
             'subject': 'Ngữ Văn',
-            'managed_classes': ['10A1', '10A2'],
+            'managed_classes': ['10A1', '10A2', '11A1'],
             'contact': 'vanpt@school.edu.vn',
         },
         'HS10A1_1': {
@@ -334,9 +322,7 @@ def clear_exam_session_state():
 
 
 def restore_exam_from_draft(draft):
-  """Khôi phục chính xác toàn bộ lựa chọn & câu văn bài thi từ bản nháp."""
   clear_exam_session_state()
-
   st.session_state.exam_data = {
       'mcq': draft['selected_mcq'],
       'tf': draft['selected_tf'],
@@ -380,7 +366,7 @@ def restore_exam_from_draft(draft):
   st.session_state.confirm_exam_id = None
 
 
-# --- ĐỌC CÔNG THỨC TOÁN, HÌNH ẢNH & THẺ MA TRẬN TỪ WORD ---
+# --- ĐỌC WORD & NỘI DUNG ĐỀ THI ---
 def get_para_text(p):
   nodes = p._element.xpath('.//w:t | .//m:t')
   return ''.join([node.text for node in nodes if node.text]).strip()
@@ -410,10 +396,8 @@ def extract_paragraph_images(p, doc, q_id):
       ext = image_part.content_type.split('/')[-1]
       if ext == 'jpeg':
         ext = 'jpg'
-
       img_filename = f'q_{q_id}_{idx}_{int(time.time()*1000)}.{ext}'
       save_path = os.path.join(IMG_FOLDER, img_filename)
-
       with open(save_path, 'wb') as f:
         f.write(image_part.blob)
       img_paths.append(save_path)
@@ -455,7 +439,7 @@ def extract_question_metadata(raw_text):
   return clean_q, chapter, level
 
 
-@st.cache_data(show_spinner='Đang tải câu hỏi và ma trận từ Ngân hàng đề...')
+@st.cache_data(show_spinner='Đang tải câu hỏi từ Ngân hàng đề...')
 def parse_question_bank(file_path):
   if not os.path.exists(file_path):
     return [], [], []
@@ -651,7 +635,7 @@ def grade_tf(user_answers, correct_answers):
   return score_map.get(correct_count, 0.0), correct_count
 
 
-# --- GIAO DIỆN & DỊCH VỤ NỀN ---
+# --- GIAO DIỆN & CẤU HÌNH CSS CỐ ĐỊNH ---
 st.set_page_config(page_title='Hệ Thống Thi Thử Trực Tuyến', layout='wide')
 
 if 'bank_uploader_key' not in st.session_state:
@@ -673,43 +657,55 @@ st.markdown(
         color: #1f1f1f !important;
         margin-bottom: 8px !important;
     }
-    [data-testid="stIcon"], .material-symbols-rounded, [class*="stIcon"], i[class*="st-"], button[aria-label*="password"] *, button[aria-label*="Password"] * {
-        font-family: 'Material Symbols Rounded', 'Material Icons' !important;
-    }
-    div[id^="q_"] { scroll-margin-top: 70px !important; display: block; }
-    div[role="radiogroup"] label p, label p { font-family: 'Arial', sans-serif !important; font-size: 17px !important; color: #2b2b2b !important; }
-    textarea, input[type="text"] { font-family: 'Arial', sans-serif !important; font-size: 17px !important; }
     
-    /* ẨN POPUP MẬT KHẨU BẰNG CÁCH MÃ HÓA Ô NHẬP TỰ ĐỘNG THÀNH DẤU CHẤM */
+    /* GHIM CỐ ĐỊNH NÚT USER PROFILE Ở GÓC TRÊN BÊN PHẢI */
+    div[data-testid="stPopover"] {
+        position: fixed !important;
+        top: 12px !important;
+        right: 25px !important;
+        z-index: 999999 !important;
+    }
+
+    /* ẨN POPUP MẬT KHẨU TỰ ĐỘNG BẰNG CÁCH MÃ HÓA Ô NHẬP */
     div[data-testid="stTextInput"] input[aria-label*="Mật khẩu"] {
         -webkit-text-security: disc !important;
     }
 
-    /* Cấu hình khung đăng nhập chuẩn đẹp */
-    .login-box { 
+    /* KHUNG ĐĂNG NHẬP NGUYÊN KHỐI NẰM TRONG VIỀN VÀ BÓNG TẠO SỰ CÂN ĐỐI */
+    .login-container { 
         background-color: #ffffff; 
-        padding: 35px 30px; 
-        border-radius: 14px; 
-        box-shadow: 0px 4px 20px rgba(0,0,0,0.12); 
+        padding: 30px 25px; 
+        border-radius: 12px; 
+        border: 1px solid #dcdcdc;
+        box-shadow: 0px 4px 18px rgba(0,0,0,0.1); 
         margin: 40px auto; 
-        max-width: 500px;
+        max-width: 450px;
         width: 100%;
     }
-    .login-title {
-        font-size: 24px !important;
+    .login-header-title {
+        font-size: 22px !important;
         font-weight: bold !important;
         text-align: center !important;
         white-space: nowrap !important;
         color: #1f1f1f !important;
-        margin-bottom: 25px !important;
+        margin-bottom: 20px !important;
     }
+
+    /* TỐI ƯU CỐ ĐỊNH CÁC CỘT BẢNG DATAFRAME KHÔNG BỊ TRƯỢT SANG TRÁI/PHẢI VÔ LÝ */
+    div[data-testid="stDataFrame"] {
+        width: 100% !important;
+    }
+    div[data-testid="stDataFrame"] table {
+        width: 100% !important;
+    }
+
     .confirm-modal { background-color: #ffffff; padding: 30px; border-radius: 14px; border: 2px solid #007bff; box-shadow: 0px 10px 30px rgba(0,0,0,0.2); width: 100%; }
     </style>
 """,
     unsafe_allow_html=True,
 )
 
-# JavaScript tự động đăng xuất sau 5 phút không thao tác
+# JavaScript tự động Logout sau 5 phút không hoạt động
 inactivity_js = """
 <script>
 (function() {
@@ -733,8 +729,22 @@ components.html(inactivity_js, height=0, width=0)
 users_db = load_users()
 exams_db = load_exams()
 
-if 'user_session' not in st.session_state:
-  st.session_state.user_session = None
+# DUY TRÌ ĐĂNG NHẬP KHI LOAD LAI TRANG (RELOAD / F5)
+if 'user_session' not in st.session_state or not st.session_state.user_session:
+  saved_u = st.query_params.get('u')
+  if saved_u and saved_u in users_db:
+    u = users_db[saved_u]
+    st.session_state.user_session = {
+        'username': saved_u,
+        'name': u['name'],
+        'role': u['role'],
+        'is_head': u.get('is_head', False),
+        'subject': u.get('subject', 'ALL'),
+        'managed_classes': u.get('managed_classes', ['ALL']),
+        'class_name': u.get('class_name', ''),
+    }
+    st.session_state.last_activity = time.time()
+
 if 'show_forgot' not in st.session_state:
   st.session_state.show_forgot = False
 if 'submitted_data' not in st.session_state:
@@ -743,54 +753,56 @@ if 'confirm_exam_id' not in st.session_state:
   st.session_state.confirm_exam_id = None
 
 now_ts = time.time()
-if st.session_state.user_session:
+if st.session_state.get('user_session'):
   last_act = st.session_state.get('last_activity', now_ts)
-  if now_ts - last_act > 300:
+  if now_ts - last_act > 300:  # Quá 5 phút tự động logout
     clear_exam_session_state()
     st.session_state.user_session = None
     st.session_state.submitted_data = None
     st.session_state.confirm_exam_id = None
+    st.query_params.clear()
     st.warning('⏰ Đã tự động đăng xuất do bạn không hoạt động trong 5 phút!')
     st.rerun()
   else:
     st.session_state.last_activity = now_ts
 
 
-# --- MÀN HÌNH ĐĂNG NHẬP ---
-if not st.session_state.user_session:
+# --- MÀN HÌNH ĐĂNG NHẬP NẰM GỌN TRONG KHUNG VIỀN ---
+if not st.session_state.get('user_session'):
   col_l1, col_center, col_l2 = st.columns([1, 2, 1])
   with col_center:
-    st.markdown("<div class='login-box'>", unsafe_allow_html=True)
+    st.markdown("<div class='login-container'>", unsafe_allow_html=True)
     st.markdown(
-        "<div class='login-title'>🔐 ĐĂNG NHẬP HỆ THỐNG</div>",
+        "<div class='login-header-title'>🔐 ĐĂNG NHẬP HỆ THỐNG</div>",
         unsafe_allow_html=True,
     )
 
-    username_input = st.text_input('Mã học sinh / Tên đăng nhập:')
+    with st.form(key='login_form_inner'):
+      username_input = st.text_input('Mã học sinh / Tên đăng nhập:')
+      password_input = st.text_input('Mật khẩu:')
+      btn_login = st.form_submit_button('🚀 Đăng Nhập', use_container_width=True)
 
-    # Bỏ type='password' để triệt tiêu popup gợi ý mật khẩu mạnh của Chrome, sử dụng CSS -webkit-text-security thay thế
-    password_input = st.text_input('Mật khẩu:')
-
-    if st.button('🚀 Đăng Nhập', use_container_width=True):
-      if username_input in users_db:
-        if users_db[username_input]['password'] == password_input:
-          u = users_db[username_input]
-          st.session_state.user_session = {
-              'username': username_input,
-              'name': u['name'],
-              'role': u['role'],
-              'is_head': u.get('is_head', False),
-              'subject': u.get('subject', 'ALL'),
-              'managed_classes': u.get('managed_classes', ['ALL']),
-              'class_name': u.get('class_name', ''),
-          }
-          st.session_state.last_activity = time.time()
-          st.success('Đăng nhập thành công!')
-          st.rerun()
+      if btn_login:
+        if username_input in users_db:
+          if users_db[username_input]['password'] == password_input:
+            u = users_db[username_input]
+            st.session_state.user_session = {
+                'username': username_input,
+                'name': u['name'],
+                'role': u['role'],
+                'is_head': u.get('is_head', False),
+                'subject': u.get('subject', 'ALL'),
+                'managed_classes': u.get('managed_classes', ['ALL']),
+                'class_name': u.get('class_name', ''),
+            }
+            st.session_state.last_activity = time.time()
+            st.query_params['u'] = username_input  # Lưu URL param giữ session
+            st.success('Đăng nhập thành công!')
+            st.rerun()
+          else:
+            st.error('❌ Mật khẩu không chính xác!')
         else:
-          st.error('❌ Mật khẩu không chính xác!')
-      else:
-        st.error('❌ Mã đăng nhập không tồn tại!')
+          st.error('❌ Mã đăng nhập không tồn tại!')
 
     if st.button('Quên mật khẩu?', key='btn_forgot_toggle'):
       st.session_state.show_forgot = not st.session_state.show_forgot
@@ -832,52 +844,52 @@ if not st.session_state.user_session:
   st.stop()
 
 
-# --- HEADER BÊN PHẢI ---
+# --- HEADER BÊN PHẢI (CỐ ĐỊNH TRÊN CÙNG GÓC PHẢI) ---
 user = st.session_state.user_session
-head_col1, head_col2 = st.columns([3, 1])
-with head_col2:
-  role_display = (
-      user['class_name']
-      if user['role'] == 'student'
-      else (f"GV {user['subject']}" if user['role'] == 'teacher' else 'ADMIN')
+role_display = (
+    user['class_name']
+    if user['role'] == 'student'
+    else (f"GV {user['subject']}" if user['role'] == 'teacher' else 'ADMIN')
+)
+
+with st.popover(f"👤 {user['name']} ({role_display})"):
+  st.write(f"**Tài khoản:** `{user['username']}`")
+  st.write(
+      f"**Chức vụ:**"
+      f" {'Trưởng bộ môn' if user.get('is_head') else user['role'].upper()}"
   )
-  with st.popover(f"👤 {user['name']} ({role_display})"):
-    st.write(f"**Tài khoản:** `{user['username']}`")
-    st.write(
-        f"**Chức vụ:**"
-        f" {'Trưởng bộ môn' if user.get('is_head') else user['role'].upper()}"
-    )
 
-    with st.expander('🔑 Đổi Mật Khẩu'):
-      with st.form(key=f"form_change_pass_{user['username']}"):
-        old_p = st.text_input('Mật khẩu cũ:')
-        new_p = st.text_input('Mật khẩu mới:')
-        confirm_p = st.text_input('Nhập lại mật khẩu mới:')
-        sub_pass = st.form_submit_button('💾 Lưu Mật Khẩu Mới')
+  with st.expander('🔑 Đổi Mật Khẩu'):
+    with st.form(key=f"form_change_pass_{user['username']}"):
+      old_p = st.text_input('Mật khẩu cũ:')
+      new_p = st.text_input('Mật khẩu mới:')
+      confirm_p = st.text_input('Nhập lại mật khẩu mới:')
+      sub_pass = st.form_submit_button('💾 Lưu Mật Khẩu Mới')
 
-        if sub_pass:
-          current_pass = users_db[user['username']]['password']
-          if old_p != current_pass:
-            st.error('❌ Mật khẩu cũ không chính xác!')
-          elif new_p != confirm_p:
-            st.error('❌ Mật khẩu mới và Nhập lại không khớp!')
+      if sub_pass:
+        current_pass = users_db[user['username']]['password']
+        if old_p != current_pass:
+          st.error('❌ Mật khẩu cũ không chính xác!')
+        elif new_p != confirm_p:
+          st.error('❌ Mật khẩu mới và Nhập lại không khớp!')
+        else:
+          is_valid, err_msg = validate_password(new_p)
+          if not is_valid:
+            st.error(err_msg)
           else:
-            is_valid, err_msg = validate_password(new_p)
-            if not is_valid:
-              st.error(err_msg)
-            else:
-              users_db[user['username']]['password'] = new_p
-              save_users(users_db)
-              st.success('✅ Đã đổi mật khẩu thành công!')
+            users_db[user['username']]['password'] = new_p
+            save_users(users_db)
+            st.success('✅ Đã đổi mật khẩu thành công!')
 
-    if st.button('🚪 Đăng Xuất', use_container_width=True):
-      clear_exam_session_state()
-      st.session_state.user_session = None
-      st.session_state.submitted_data = None
-      st.session_state.confirm_exam_id = None
-      if 'exam_started' in st.session_state:
-        del st.session_state['exam_started']
-      st.rerun()
+  if st.button('🚪 Đăng Xuất', use_container_width=True):
+    clear_exam_session_state()
+    st.session_state.user_session = None
+    st.session_state.submitted_data = None
+    st.session_state.confirm_exam_id = None
+    st.query_params.clear()
+    if 'exam_started' in st.session_state:
+      del st.session_state['exam_started']
+    st.rerun()
 
 
 # ==================== GIAO DIỆN GIÁO VIÊN / ADMIN ====================
@@ -1167,7 +1179,7 @@ if user['role'] in ['teacher', 'admin']:
                         st.session_state[f'edit_btn_{f_name}'] = False
                       st.rerun()
 
-  # TAB 2: THỐNG KÊ ĐIỂM BÀI THI
+  # TAB 2: THỐNG KÊ ĐIỂM
   with tabs[1]:
     st.subheader('📊 THỐNG KÊ KẾT QUẢ ĐIỂM THI')
     all_submissions = []
@@ -1281,236 +1293,192 @@ if user['role'] in ['teacher', 'admin']:
 
   # TAB 3: TẠO & QUẢN LÝ ĐỀ THI
   with tabs[2]:
-    st.subheader('📤 TẢI LÊN & QUẢN LÝ NGÂN HÀNG ĐỀ THI')
+    st.subheader('⚙️ QUẢN LÝ ĐỀ THI')
 
-    uploaded_bank = st.file_uploader(
-        'Chọn file câu hỏi Word (.docx) từ máy tính (Tải lên thành công sẽ tự'
-        ' động cập nhật vào danh sách):',
-        type=['docx'],
-        key=f'bank_uploader_{st.session_state.bank_uploader_key}',
-    )
-
-    if uploaded_bank is not None:
-      saved_filename = f"{user['username']}_{uploaded_bank.name}"
-      save_path = os.path.join(BANK_FOLDER, saved_filename)
-      is_overwrite = os.path.exists(save_path)
-
-      with open(save_path, 'wb') as f:
-        f.write(uploaded_bank.getbuffer())
-
-      parse_question_bank.clear()
-
-      st.session_state.bank_uploader_key += 1
-
-      if is_overwrite:
-        st.toast(
-            f'🔄 Đã **CẬP NHẬT / GHI ĐÈ** thành công file `{uploaded_bank.name}`!'
-        )
-      else:
-        st.toast(f'✅ Đã tải lên file mới `{uploaded_bank.name}` thành công!')
-
-      st.rerun()
-
-    raw_bank_files = [
-        f for f in os.listdir(BANK_FOLDER) if f.endswith('.docx')
-    ]
-    if user['role'] == 'admin':
-      my_bank_files = raw_bank_files
-    else:
-      prefix = f"{user['username']}_"
-      my_bank_files = [f for f in raw_bank_files if f.startswith(prefix)]
-
-    if my_bank_files:
-      with st.expander(
-          '🗂️ Quản Lý File Ngân Hàng Đề Của Bạn (Xem / Xóa file đã up)'
-      ):
-        for f_item in my_bank_files:
-          disp_name = (
-              f_item.split('_', 1)[-1] if '_' in f_item else f_item
-          )
-          col_f1, col_f2 = st.columns([4, 1])
-          with col_f1:
-            st.write(f'📄 **{disp_name}**')
-          with col_f2:
-            if st.button('🗑️ Xóa File', key=f'del_file_{f_item}'):
-              os.remove(os.path.join(BANK_FOLDER, f_item))
-              parse_question_bank.clear()
-              st.toast(f'Đã xóa file {disp_name}')
-              st.rerun()
-
-    st.markdown('---')
-    st.subheader('➕ Tạo Đề Thi Mới')
-
-    if not my_bank_files:
-      st.warning(
-          '💡 Bạn chưa có file ngân hàng đề thi nào. Hãy dùng nút **Upload**'
-          ' bên trên để đưa file Word (.docx) của bạn vào hệ thống!'
-      )
-    else:
-      c1, c2 = st.columns(2)
-      with c1:
-        if user['role'] == 'teacher':
-          ex_subject = st.text_input(
-              'Môn học:', value=user['subject'], disabled=True
-          )
-          allowed_classes = user.get('managed_classes', [])
-          target_class = st.selectbox(
-              'Lớp áp dụng:',
-              options=allowed_classes if allowed_classes else ['ALL'],
-          )
-        else:
-          ex_subject = st.selectbox(
-              'Môn học:', options=list(SUBJECT_PREFIXES.keys())
-          )
-          target_class = st.text_input(
-              'Lớp áp dụng (VD: 10A1 hoặc ALL):', value='10A1'
-          )
-
-        auto_code = generate_exam_code(ex_subject, exams_db)
-        ex_code = st.text_input('Mã bài thi (Tự động):', value=auto_code)
-        ex_title = st.text_input('Tên bài thi:', value='Bài Thi Giữa Kỳ')
-
-        if user['role'] == 'admin' or user.get('is_head'):
-          allowed_types = ['Thường xuyên', 'Giữa kỳ', 'Cuối kỳ']
-        else:
-          allowed_types = ['Thường xuyên', 'Giữa kỳ']
-
-        ex_type = st.selectbox('Dạng bài thi:', options=allowed_types)
-        max_attempts_input = st.number_input('Số lần làm bài tối đa:', 1, 10, 1)
-
-      with c2:
-        display_map = {
-            (f.split('_', 1)[-1] if '_' in f else f): f for f in my_bank_files
-        }
-        selected_display = st.selectbox(
-            'Chọn File Ngân hàng đề của bạn:', list(display_map.keys())
-        )
-        selected_bank = display_map[selected_display]
-
-        mcq_p, tf_p, es_p = parse_question_bank(
-            os.path.join(BANK_FOLDER, selected_bank)
-        )
-
-        all_pool = mcq_p + tf_p + es_p
-        chap_set = set(q.get('chapter', 'Chương 1') for q in all_pool)
-        level_set = set(q.get('level', 'Thông hiểu') for q in all_pool)
-        st.caption(
-            f'📊 **Thống kê ma trận file:** {len(all_pool)} câu |'
-            f' {len(chap_set)} Chương | Các mức độ:'
-            f' {", ".join(sorted(level_set))}'
-        )
-
-        num_mcq_input = st.number_input(
-            'Số câu Trắc nghiệm:',
-            min_value=0,
-            max_value=len(mcq_p),
-            value=min(10, len(mcq_p)),
-        )
-        num_tf_input = st.number_input(
-            'Số câu Đúng/Sai:',
-            min_value=0,
-            max_value=len(tf_p),
-            value=min(2, len(tf_p)),
-        )
-
-        essay_label = (
-            'Trả lời ngắn' if ex_subject in SHORT_ANSWER_SUBJECTS else 'Tự luận'
-        )
-        num_es_input = st.number_input(
-            f'Số câu {essay_label}:',
-            min_value=0,
-            max_value=len(es_p),
-            value=min(2, len(es_p)),
-        )
-        duration_input = st.number_input('Thời gian làm bài (Phút):', 1, 180, 45)
-
-      st.markdown('### ⏱️ Cấu Hình Thời Gian Mở Đề')
-      t_col1, t_col2 = st.columns(2)
-      now_dt = datetime.datetime.now()
-      with t_col1:
-        start_d = st.date_input('Ngày bắt đầu mở đề:', now_dt.date())
-        start_t = st.time_input('Giờ bắt đầu mở đề:', now_dt.time())
-
-      start_datetime = datetime.datetime.combine(start_d, start_t)
-      default_end = start_datetime + datetime.timedelta(
-          minutes=duration_input + 5
+    # CHỈ HIỂN THỊ PHẦN NHẬP THÔNG TIN KHI BẤM NÚT "TẠO ĐỀ THI MỚI"
+    with st.expander('➕ Tạo Đề Thi Mới (Bấm vào để mở form)', expanded=False):
+      st.markdown('#### 📤 Tải Lên Ngân Hàng Đề Thi')
+      uploaded_bank = st.file_uploader(
+          'Chọn file câu hỏi Word (.docx) từ máy tính:',
+          type=['docx'],
+          key=f'bank_uploader_{st.session_state.bank_uploader_key}',
       )
 
-      with t_col2:
-        end_d = st.date_input('Ngày kết thúc mở đề:', default_end.date())
-        end_t = st.time_input('Giờ kết thúc mở đề:', default_end.time())
-
-      end_datetime = datetime.datetime.combine(end_d, end_t)
-
-      if ex_subject == 'Ngữ Văn' and (num_mcq_input > 0 or num_tf_input > 0):
-        essay_points = 7.0
-        tf_points = float(num_tf_input) * 1.0
-        mcq_points = max(0.0, 3.0 - tf_points)
-      elif ex_subject == 'Toán':
-        essay_points = round(float(num_es_input) * 0.5, 2)
-        tf_points = float(num_tf_input) * 1.0
-        mcq_points = max(0.0, round(10.0 - tf_points - essay_points, 2))
-      elif ex_subject in ['Vật Lý', 'Hóa Học']:
-        essay_points = round(float(num_es_input) * 0.25, 2)
-        tf_points = float(num_tf_input) * 1.0
-        mcq_points = max(0.0, round(10.0 - tf_points - essay_points, 2))
-      else:
-        tf_points = float(num_tf_input) * 1.0
-        remaining_pts = max(0.0, 10.0 - tf_points)
-
-        if num_mcq_input == 0 and num_es_input == 0:
-          mcq_points, essay_points = 0.0, 0.0
-        elif num_mcq_input == 0 and num_es_input > 0:
-          mcq_points, essay_points = 0.0, remaining_pts
-        elif num_mcq_input > 0 and num_es_input == 0:
-          mcq_points, essay_points = remaining_pts, 0.0
+      if uploaded_bank is not None:
+        saved_filename = f"{user['username']}_{uploaded_bank.name}"
+        save_path = os.path.join(BANK_FOLDER, saved_filename)
+        is_overwrite = os.path.exists(save_path)
+        with open(save_path, 'wb') as f:
+          f.write(uploaded_bank.getbuffer())
+        parse_question_bank.clear()
+        st.session_state.bank_uploader_key += 1
+        if is_overwrite:
+          st.toast(f'🔄 Đã ghi đè file `{uploaded_bank.name}`!')
         else:
-          essay_points = st.number_input(
-              f'Nhập tổng điểm phần {essay_label} (Tối đa {remaining_pts}đ):',
-              min_value=0.0,
-              max_value=remaining_pts,
-              value=min(3.0, remaining_pts),
-              step=0.5,
-              key='input_essay_pts',
+          st.toast(f'✅ Đã tải lên file `{uploaded_bank.name}` thành công!')
+        st.rerun()
+
+      raw_bank_files = [
+          f for f in os.listdir(BANK_FOLDER) if f.endswith('.docx')
+      ]
+      my_bank_files = (
+          raw_bank_files
+          if user['role'] == 'admin'
+          else [f for f in raw_bank_files if f.startswith(f"{user['username']}_")]
+      )
+
+      if not my_bank_files:
+        st.warning('💡 Bạn cần tải lên ít nhất 1 file Word (.docx) ngân hàng đề!')
+      else:
+        c1, c2 = st.columns(2)
+        with c1:
+          if user['role'] == 'teacher':
+            ex_subject = st.text_input(
+                'Môn học:', value=user['subject'], disabled=True
+            )
+            allowed_classes = user.get('managed_classes', [])
+            target_class = st.selectbox(
+                'Lớp áp dụng:',
+                options=allowed_classes if allowed_classes else ['ALL'],
+            )
+          else:
+            ex_subject = st.selectbox(
+                'Môn học:', options=list(SUBJECT_PREFIXES.keys())
+            )
+            target_class = st.text_input(
+                'Lớp áp dụng (VD: 10A1 hoặc ALL):', value='10A1'
+            )
+
+          auto_code = generate_exam_code(ex_subject, exams_db)
+          ex_code = st.text_input('Mã bài thi (Tự động):', value=auto_code)
+          ex_title = st.text_input('Tên bài thi:', value='Bài Thi Giữa Kỳ')
+          allowed_types = (
+              ['Thường xuyên', 'Giữa kỳ', 'Cuối kỳ']
+              if (user['role'] == 'admin' or user.get('is_head'))
+              else ['Thường xuyên', 'Giữa kỳ']
+          )
+          ex_type = st.selectbox('Dạng bài thi:', options=allowed_types)
+          max_attempts_input = st.number_input(
+              'Số lần làm bài tối đa:', 1, 10, 1
+          )
+
+        with c2:
+          display_map = {
+              (f.split('_', 1)[-1] if '_' in f else f): f
+              for f in my_bank_files
+          }
+          selected_display = st.selectbox(
+              'Chọn File Ngân hàng đề:', list(display_map.keys())
+          )
+          selected_bank = display_map[selected_display]
+
+          mcq_p, tf_p, es_p = parse_question_bank(
+              os.path.join(BANK_FOLDER, selected_bank)
+          )
+          all_pool = mcq_p + tf_p + es_p
+          chap_set = set(q.get('chapter', 'Chương 1') for q in all_pool)
+          level_set = set(q.get('level', 'Thông hiểu') for q in all_pool)
+          st.caption(
+              f'📊 **Tổng số câu trong file:** {len(all_pool)} câu |'
+              f' {len(chap_set)} Chương | Mức độ: {", ".join(sorted(level_set))}'
+          )
+
+          num_mcq_input = st.number_input(
+              'Số câu Trắc nghiệm:',
+              min_value=0,
+              max_value=len(mcq_p),
+              value=min(10, len(mcq_p)),
+          )
+          num_tf_input = st.number_input(
+              'Số câu Đúng/Sai:',
+              min_value=0,
+              max_value=len(tf_p),
+              value=min(2, len(tf_p)),
+          )
+          essay_label = (
+              'Trả lời ngắn'
+              if ex_subject in SHORT_ANSWER_SUBJECTS
+              else 'Tự luận'
+          )
+          num_es_input = st.number_input(
+              f'Số câu {essay_label}:',
+              min_value=0,
+              max_value=len(es_p),
+              value=min(2, len(es_p)),
+          )
+          duration_input = st.number_input(
+              'Thời gian làm bài (Phút):', 1, 180, 45
+          )
+
+        st.markdown('### ⏱️ Thời Gian Mở Đề')
+        t_col1, t_col2 = st.columns(2)
+        now_dt = datetime.datetime.now()
+        with t_col1:
+          start_d = st.date_input('Ngày bắt đầu mở đề:', now_dt.date())
+          start_t = st.time_input('Giờ bắt đầu mở đề:', now_dt.time())
+        start_datetime = datetime.datetime.combine(start_d, start_t)
+        default_end = start_datetime + datetime.timedelta(
+            minutes=duration_input + 5
+        )
+
+        with t_col2:
+          end_d = st.date_input('Ngày kết thúc mở đề:', default_end.date())
+          end_t = st.time_input('Giờ kết thúc mở đề:', default_end.time())
+        end_datetime = datetime.datetime.combine(end_d, end_t)
+
+        if ex_subject == 'Ngữ Văn' and (num_mcq_input > 0 or num_tf_input > 0):
+          essay_points = 7.0
+          tf_points = float(num_tf_input) * 1.0
+          mcq_points = max(0.0, 3.0 - tf_points)
+        elif ex_subject == 'Toán':
+          essay_points = round(float(num_es_input) * 0.5, 2)
+          tf_points = float(num_tf_input) * 1.0
+          mcq_points = max(0.0, round(10.0 - tf_points - essay_points, 2))
+        elif ex_subject in ['Vật Lý', 'Hóa Học']:
+          essay_points = round(float(num_es_input) * 0.25, 2)
+          tf_points = float(num_tf_input) * 1.0
+          mcq_points = max(0.0, round(10.0 - tf_points - essay_points, 2))
+        else:
+          tf_points = float(num_tf_input) * 1.0
+          remaining_pts = max(0.0, 10.0 - tf_points)
+          essay_points = (
+              min(3.0, remaining_pts) if num_es_input > 0 else 0.0
           )
           mcq_points = max(0.0, remaining_pts - essay_points)
 
-      st.info(
-          f'📊 **Cơ cấu điểm đề thi:** Trắc nghiệm: **{mcq_points}đ** | Đúng/Sai:'
-          f' **{tf_points}đ** | {essay_label}: **{essay_points}đ** (Tổng: 10.0đ)'
-      )
+        st.info(
+            f'📊 **Điểm:** Trắc nghiệm: **{mcq_points}đ** | Đúng/Sai:'
+            f' **{tf_points}đ** | {essay_label}: **{essay_points}đ**'
+        )
 
-      if st.button('💾 Tạo Đề Thi'):
-        if end_datetime <= start_datetime:
-          st.error('❌ Thời gian kết thúc phải lớn hơn thời gian bắt đầu mở đề!')
-        else:
-          exam_id = f'EXAM_{int(time.time())}'
-          exams_db[exam_id] = {
-              'code': ex_code,
-              'title': ex_title,
-              'exam_type': ex_type,
-              'subject': ex_subject,
-              'target_class': target_class,
-              'bank_file': selected_bank,
-              'num_mcq': num_mcq_input,
-              'num_tf': num_tf_input,
-              'num_essay': num_es_input,
-              'duration': duration_input,
-              'max_attempts': max_attempts_input,
-              'mcq_points': mcq_points,
-              'tf_points': tf_points,
-              'essay_points': essay_points,
-              'start_time': start_datetime.strftime('%Y-%m-%d %H:%M'),
-              'end_time': end_datetime.strftime('%Y-%m-%d %H:%M'),
-              'is_active': True,
-              'created_by': user['username'],
-          }
-          save_exams(exams_db)
-          st.success(
-              f'✅ Đã tạo thành công bài thi [{ex_code}] ({ex_type}) cho môn'
-              f' {ex_subject}!'
-          )
-          st.rerun()
+        if st.button('💾 Tạo Bài Thi Mới', type='primary'):
+          if end_datetime <= start_datetime:
+            st.error('❌ Thời gian kết thúc phải lớn hơn thời gian bắt đầu!')
+          else:
+            exam_id = f'EXAM_{int(time.time())}'
+            exams_db[exam_id] = {
+                'code': ex_code,
+                'title': ex_title,
+                'exam_type': ex_type,
+                'subject': ex_subject,
+                'target_class': target_class,
+                'bank_file': selected_bank,
+                'num_mcq': num_mcq_input,
+                'num_tf': num_tf_input,
+                'num_essay': num_es_input,
+                'duration': duration_input,
+                'max_attempts': max_attempts_input,
+                'mcq_points': mcq_points,
+                'tf_points': tf_points,
+                'essay_points': essay_points,
+                'start_time': start_datetime.strftime('%Y-%m-%d %H:%M'),
+                'end_time': end_datetime.strftime('%Y-%m-%d %H:%M'),
+                'is_active': True,
+                'created_by': user['username'],
+            }
+            save_exams(exams_db)
+            st.success(f'✅ Đã tạo bài thi [{ex_code}] thành công!')
+            st.rerun()
 
     st.markdown('---')
     st.subheader('📋 Danh Sách Đề Thi Đã Tạo')
@@ -1535,153 +1503,30 @@ if user['role'] in ['teacher', 'admin']:
         )
         with st.expander(
             f"📌 [{ex_code_disp}] {ex_info['title']}"
-            f" ({ex_info.get('exam_type','Thường xuyên')}) - Môn:"
+            f" ({ex_info.get('exam_type','Giữa kỳ')}) - Môn:"
             f" {ex_info.get('subject','')} (Lớp: {ex_info.get('target_class','ALL')})"
         ):
           st.write(
-              f"⏱️ **Thời gian mở:** {ex_info.get('start_time','N/A')} ➔"
-              f" {ex_info.get('end_time','N/A')} | **Thời gian làm bài:**"
-              f" {ex_info.get('duration', 45)} phút | **Người tạo:**"
-              f" {ex_info.get('created_by','admin')}"
+              f"⏱️ **Mở đề:** {ex_info.get('start_time','N/A')} ➔"
+              f" {ex_info.get('end_time','N/A')} | **Thời gian:**"
+              f" {ex_info.get('duration', 45)} phút"
           )
-          st.write(
-              f"⚙️ **Cấu trúc:** {ex_info.get('num_mcq',0)} câu Trắc nghiệm"
-              f" ({ex_info.get('mcq_points',0)}đ) | {ex_info.get('num_tf',0)} câu"
-              f" Đúng/Sai ({ex_info.get('tf_points',0)}đ) |"
-              f" {ex_info.get('num_essay',0)} câu {e_lbl}"
-              f" ({ex_info.get('essay_points',0)}đ)"
-          )
-
-          b_col1, b_col2, b_col3, b_col4 = st.columns(4)
-
+          b_col1, b_col2, b_col3 = st.columns(3)
           status_str = '🟢 Đang Mở' if ex_info['is_active'] else '🔴 Đang Đóng'
           if b_col1.button(f'{status_str}', key=f'toggle_{ex_id}'):
             exams_db[ex_id]['is_active'] = not exams_db[ex_id]['is_active']
             save_exams(exams_db)
             st.rerun()
 
-          show_q_key = f'show_q_{ex_id}'
-          if b_col2.button('👁️ Xem Nội Dung Đề', key=f'btn_q_{ex_id}'):
-            st.session_state[show_q_key] = not st.session_state.get(
-                show_q_key, False
-            )
-
-          show_st_key = f'show_st_{ex_id}'
-          if b_col3.button('📊 Xem Thống Kê Điểm', key=f'btn_st_{ex_id}'):
-            st.session_state[show_st_key] = not st.session_state.get(
-                show_st_key, False
-            )
-
-          if b_col4.button('🗑️ Xóa Đề Thi', key=f'del_{ex_id}'):
+          if b_col2.button('🗑️ Xóa Đề Thi', key=f'del_{ex_id}'):
             del exams_db[ex_id]
             save_exams(exams_db)
             st.rerun()
 
-          if st.session_state.get(show_q_key, False):
-            st.markdown('---')
-            st.markdown('##### 📝 NỘI DUNG CÂU HỎI TRONG ĐỀ THI')
-            bank_path = os.path.join(BANK_FOLDER, ex_info.get('bank_file', ''))
-            mcq_p, tf_p, es_p = parse_question_bank(bank_path)
-            st.info(f"File ngân hàng đề gốc: `{ex_info.get('bank_file')}`")
-
-            if mcq_p and ex_info.get('num_mcq', 0) > 0:
-              st.write('**I. Phần Trắc Nghiệm:**')
-              for idx, q in enumerate(mcq_p[: ex_info['num_mcq']], 1):
-                st.write(
-                    f"**Câu {idx} [{q.get('chapter')}] [{q.get('level')}]:**"
-                    f" {q['question']}"
-                )
-                if q.get('images'):
-                  for img_p in q['images']:
-                    if os.path.exists(img_p):
-                      st.image(img_p, width=400)
-                for opt in q.get('options', []):
-                  mark = ' ✅ (Đáp án đúng)' if opt.get('is_correct') else ''
-                  st.write(f"- {opt['text']}{mark}")
-
-            if tf_p and ex_info.get('num_tf', 0) > 0:
-              st.write('**II. Phần Đúng / Sai:**')
-              for idx, q in enumerate(tf_p[: ex_info['num_tf']], 1):
-                st.write(
-                    f"**Câu {idx} [{q.get('chapter')}] [{q.get('level')}]:**"
-                    f" {q['question']}"
-                )
-                if q.get('images'):
-                  for img_p in q['images']:
-                    if os.path.exists(img_p):
-                      st.image(img_p, width=400)
-                for sub in q.get('sub_items', []):
-                  ans_str = 'ĐÚNG' if sub.get('answer') else 'SAI'
-                  st.write(f"- {sub['text']} -> **[{ans_str}]**")
-
-            if es_p and ex_info.get('num_essay', 0) > 0:
-              st.write(f'**III. Phần {e_lbl}:**')
-              for idx, q in enumerate(es_p[: ex_info['num_essay']], 1):
-                st.write(
-                    f"**Câu {idx} [{q.get('chapter')}] [{q.get('level')}]:**"
-                    f" {q['question']}"
-                )
-                if q.get('images'):
-                  for img_p in q['images']:
-                    if os.path.exists(img_p):
-                      st.image(img_p, width=400)
-                if q.get('sample_answer'):
-                  st.write(f"  *Đáp án chuẩn:* `{q['sample_answer']}`")
-
-          if st.session_state.get(show_st_key, False):
-            st.markdown('---')
-            st.markdown(f'##### 📊 KẾT QUẢ & THỐNG KÊ BÀI THI [{ex_code_disp}]')
-            ex_submissions = []
-            for f_name in os.listdir(SUBMIT_FOLDER):
-              if f_name.endswith('.json'):
-                try:
-                  with open(
-                      os.path.join(SUBMIT_FOLDER, f_name), 'r', encoding='utf-8'
-                  ) as f:
-                    sdata = json.load(f)
-                    real_c = get_real_exam_code(sdata, exams_db)
-                    if real_c == ex_code_disp or (
-                        sdata.get('exam_title') == ex_info['title']
-                        and sdata.get('subject') == ex_info.get('subject')
-                    ):
-                      ex_submissions.append(sdata)
-                except Exception:
-                  pass
-
-            if not ex_submissions:
-              st.warning('Chưa có bài nộp nào cho đề thi này.')
-            else:
-              scores = [s.get('total_score', 0.0) for s in ex_submissions]
-              avg_sc = round(sum(scores) / len(scores), 2)
-              max_sc = max(scores)
-              min_sc = min(scores)
-              pass_r = round(
-                  sum(1 for sc in scores if sc >= 5.0) / len(scores) * 100, 1
-              )
-
-              m1, m2, m3, m4 = st.columns(4)
-              m1.metric('Tổng bài nộp', f'{len(scores)} bài')
-              m2.metric('Điểm trung bình', f'{avg_sc}đ')
-              m3.metric('Điểm Cao/Thấp nhất', f'{max_sc}đ / {min_sc}đ')
-              m4.metric('Tỷ lệ Đạt (≥5.0)', f'{pass_r}%')
-
-              tbl_data = []
-              for s in ex_submissions:
-                tbl_data.append({
-                    'Mã HS': s.get('student_id'),
-                    'Họ Tên': s.get('student_name'),
-                    'Điểm Tự Động': s.get('auto_score'),
-                    'Tổng Điểm': s.get('total_score'),
-                    'Trạng Thái': (
-                        '🟢 Đã chấm' if s.get('is_graded', True) else '⏳ Chờ chấm'
-                    ),
-                    'Thời Gian Nộp': s.get('timestamp'),
-                })
-              st.dataframe(tbl_data, use_container_width=True)
-
-  # TAB 4: QUẢN LÝ LỚP HỌC & HỌC SINH
+  # TAB 4: QUẢN LÝ LỚP HỌC (ĐƯA BẢNG DANH SÁCH LÊN TRƯỚC, BỘ LỌC KHỐI -> LỚP)
   with tabs[3]:
     st.subheader('🏫 QUẢN LÝ LỚP HỌC & HỌC SINH')
+
     all_students = [
         k for k, v in users_db.items() if v.get('role') == 'student'
     ]
@@ -1704,138 +1549,27 @@ if user['role'] in ['teacher', 'admin']:
     else:
       selectable_classes = all_classes if all_classes else ['10A1']
 
-    selected_class_view = st.selectbox(
-        'Chọn Lớp Học để quản lý:', options=selectable_classes
-    )
-
-    st.markdown('---')
-    exp_ex, exp_man = st.tabs([
-        '📊 Nhập Học Sinh Từ File Excel',
-        '➕ Thêm Thủ Công 1 Học Sinh',
-    ])
-
-    # NHẬP HỌC SINH TỪ EXCEL & TỰ ĐỘNG PHÂN LỚP
-    with exp_ex:
-      st.write(
-          'Tải lên file Excel chứa danh sách học sinh có các cột:'
-          ' **MHS/Mã/ID**, **Tên/Họ tên**, **Lớp**, **SĐT/Email**. Mật khẩu ban'
-          ' đầu là `123` (Học sinh có thể tự thay đổi).'
-      )
-      uploaded_excel = st.file_uploader(
-          'Chọn file Excel danh sách học sinh:',
-          type=['xlsx', 'xls', 'csv'],
-          key=f'excel_uploader_{st.session_state.excel_uploader_key}',
+    # BỘ LỌC CHỌN KHỐI RỒI MỚI CHỌN LỚP
+    f_col1, f_col2 = st.columns(2)
+    with f_col1:
+      selected_grade = st.selectbox(
+          '1️⃣ Chọn Khối Học:', ['Khối 10', 'Khối 11', 'Khối 12']
       )
 
-      if uploaded_excel is not None:
-        try:
-          if uploaded_excel.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_excel)
-          else:
-            df = pd.read_excel(uploaded_excel)
+    grade_num = selected_grade.split()[-1]  # lấy '10', '11', '12'
+    filtered_classes_by_grade = [
+        c for c in selectable_classes if c.startswith(grade_num)
+    ]
 
-          df.columns = [str(c).strip().lower() for c in df.columns]
-
-          id_col = next(
-              (
-                  c
-                  for c in df.columns
-                  if 'mhs' in c or 'mã' in c or 'id' in c or 'username' in c
-              ),
-              None,
-          )
-          name_col = next(
-              (
-                  c
-                  for c in df.columns
-                  if 'tên' in c or 'name' in c or 'họ' in c
-              ),
-              None,
-          )
-          class_col = next(
-              (c for c in df.columns if 'lớp' in c or 'class' in c), None
-          )
-          contact_col = next(
-              (
-                  c
-                  for c in df.columns
-                  if 'sđt' in c
-                  or 'email' in c
-                  or 'contact' in c
-                  or 'liên' in c
-              ),
-              None,
-          )
-
-          if not id_col or not name_col:
-            st.error(
-                "❌ File Excel cần chứa các cột bắt buộc: 'Mã học sinh' (hoặc MHS)"
-                " và 'Họ và tên'!"
-            )
-          else:
-            count_added = 0
-            for _, row in df.iterrows():
-              hs_id = str(row[id_col]).strip()
-              hs_name = str(row[name_col]).strip()
-
-              # Lấy lớp từ Excel, nếu trống sẽ lấy lớp đang chọn
-              hs_class = (
-                  str(row[class_col]).strip()
-                  if class_col and pd.notna(row[class_col])
-                  else selected_class_view
-              )
-              hs_contact = (
-                  str(row[contact_col]).strip()
-                  if contact_col and pd.notna(row[contact_col])
-                  else ''
-              )
-
-              if hs_id and hs_id != 'nan' and hs_name and hs_name != 'nan':
-                # Giữ nguyên mật khẩu đã đổi của học sinh nếu đã có tài khoản
-                existing_pass = users_db.get(hs_id, {}).get('password', '123')
-                users_db[hs_id] = {
-                    'name': hs_name,
-                    'password': existing_pass,
-                    'role': 'student',
-                    'class_name': hs_class,
-                    'contact': hs_contact,
-                }
-                count_added += 1
-
-            save_users(users_db)
-            st.session_state.excel_uploader_key += 1
-            st.toast(
-                f'✅ Đã nhập và phân lớp thành công {count_added} học sinh!'
-            )
-            st.rerun()
-        except Exception as e:
-          st.error(f'❌ Lỗi đọc file Excel: {e}')
-
-    with exp_man:
-      c1, c2 = st.columns(2)
-      with c1:
-        new_hs_id = st.text_input('Mã Học sinh (Tên đăng nhập):')
-        new_hs_name = st.text_input('Họ và tên:')
-      with c2:
-        new_hs_pass = st.text_input('Mật khẩu:', value='123', disabled=True)
-        new_hs_contact = st.text_input('Email / SĐT:')
-
-      if st.button('➕ Thêm Học Sinh Này'):
-        if new_hs_id in users_db:
-          st.error('❌ Mã học sinh này đã tồn tại!')
-        elif new_hs_id and new_hs_name:
-          users_db[new_hs_id] = {
-              'name': new_hs_name,
-              'password': '123',
-              'role': 'student',
-              'class_name': selected_class_view,
-              'contact': new_hs_contact,
-          }
-          save_users(users_db)
-          st.toast(
-              f'✅ Đã thêm học sinh {new_hs_name} vào lớp {selected_class_view}!'
-          )
-          st.rerun()
+    with f_col2:
+      selected_class_view = st.selectbox(
+          '2️⃣ Chọn Lớp Học:',
+          options=(
+              filtered_classes_by_grade
+              if filtered_classes_by_grade
+              else selectable_classes
+          ),
+      )
 
     st.markdown('---')
     st.subheader(f'📋 DANH SÁCH HỌC SINH LỚP {selected_class_view}')
@@ -1852,7 +1586,7 @@ if user['role'] in ['teacher', 'admin']:
         and v.get('class_name') == selected_class_view
     ]
 
-    # SẮP XẾP TĂNG DẦN THEO MÃ HỌC SINH (MHS)
+    # SẮP XẾP TĂNG DẦN THEO MÃ HỌC SINH
     class_students = sorted(class_students, key=lambda x: str(x['Mã HS']))
 
     if class_students:
@@ -1860,80 +1594,128 @@ if user['role'] in ['teacher', 'admin']:
     else:
       st.info(f'Chưa có học sinh nào trong lớp {selected_class_view}.')
 
-  # TAB 5: QUẢN LÝ GIÁO VIÊN & SAO LƯU DỮ LIỆU
+    st.markdown('<br>', unsafe_allow_html=True)
+
+    # ĐƯA PHẦN NHẬP HỌC SINH XUỐNG BÊN DƯỚI DANH SÁCH
+    with st.expander('➕ Nhập / Thêm Học Sinh Vào Lớp Này'):
+      exp_ex, exp_man = st.tabs(
+          ['📊 Nhập Từ File Excel', '➕ Thêm Thủ Công 1 Học Sinh']
+      )
+
+      with exp_ex:
+        st.write(
+            'Tải lên file Excel (`.xlsx`, `.csv`) chứa danh sách các cột:'
+            ' **MHS**, **Tên**, **Lớp**, **SĐT/Email**. Mật khẩu ban đầu là `123`.'
+        )
+        uploaded_excel = st.file_uploader(
+            'Chọn file Excel:',
+            type=['xlsx', 'xls', 'csv'],
+            key=f'excel_uploader_{st.session_state.excel_uploader_key}',
+        )
+
+        if uploaded_excel is not None:
+          try:
+            df = (
+                pd.read_csv(uploaded_excel)
+                if uploaded_excel.name.endswith('.csv')
+                else pd.read_excel(uploaded_excel)
+            )
+            df.columns = [str(c).strip().lower() for c in df.columns]
+
+            id_col = next(
+                (
+                    c
+                    for c in df.columns
+                    if 'mhs' in c or 'mã' in c or 'id' in c or 'username' in c
+                ),
+                None,
+            )
+            name_col = next(
+                (
+                    c
+                    for c in df.columns
+                    if 'tên' in c or 'name' in c or 'họ' in c
+                ),
+                None,
+            )
+            class_col = next(
+                (c for c in df.columns if 'lớp' in c or 'class' in c), None
+            )
+            contact_col = next(
+                (
+                    c
+                    for c in df.columns
+                    if 'sđt' in c
+                    or 'email' in c
+                    or 'contact' in c
+                    or 'liên' in c
+                ),
+                None,
+            )
+
+            if not id_col or not name_col:
+              st.error("❌ File Excel cần chứa các cột: 'MHS' và 'Tên'!")
+            else:
+              count_added = 0
+              for _, row in df.iterrows():
+                hs_id = str(row[id_col]).strip()
+                hs_name = str(row[name_col]).strip()
+                hs_class = (
+                    str(row[class_col]).strip()
+                    if class_col and pd.notna(row[class_col])
+                    else selected_class_view
+                )
+                hs_contact = (
+                    str(row[contact_col]).strip()
+                    if contact_col and pd.notna(row[contact_col])
+                    else ''
+                )
+
+                if hs_id and hs_id != 'nan' and hs_name and hs_name != 'nan':
+                  existing_pass = users_db.get(hs_id, {}).get('password', '123')
+                  users_db[hs_id] = {
+                      'name': hs_name,
+                      'password': existing_pass,
+                      'role': 'student',
+                      'class_name': hs_class,
+                      'contact': hs_contact,
+                  }
+                  count_added += 1
+
+              save_users(users_db)
+              st.session_state.excel_uploader_key += 1
+              st.toast(f'✅ Đã nhập thành công {count_added} học sinh!')
+              st.rerun()
+          except Exception as e:
+            st.error(f'❌ Lỗi đọc file Excel: {e}')
+
+      with exp_man:
+        c1, c2 = st.columns(2)
+        with c1:
+          new_hs_id = st.text_input('Mã Học sinh (Username):')
+          new_hs_name = st.text_input('Họ và tên:')
+        with c2:
+          new_hs_pass = st.text_input('Mật khẩu:', value='123', disabled=True)
+          new_hs_contact = st.text_input('Email / SĐT:')
+
+        if st.button('➕ Thêm Học Sinh'):
+          if new_hs_id in users_db:
+            st.error('❌ Mã học sinh này đã tồn tại!')
+          elif new_hs_id and new_hs_name:
+            users_db[new_hs_id] = {
+                'name': new_hs_name,
+                'password': '123',
+                'role': 'student',
+                'class_name': selected_class_view,
+                'contact': new_hs_contact,
+            }
+            save_users(users_db)
+            st.toast(f'✅ Đã thêm học sinh {new_hs_name}!')
+            st.rerun()
+
+  # TAB 5: QUẢN LÝ GIÁO VIÊN (ADMIN CÓ THỂ ĐỔI CẢ MÔN HỌC GIẢNG DẠY)
   if user['role'] == 'admin' or user.get('is_head'):
     with tabs[4]:
-      if user['role'] == 'admin':
-        st.subheader('💾 SAO LƯU & KHÔI PHỤC DANH SÁCH TÀI KHOẢN (AN TOÀN)')
-
-        bk_col1, bk_col2 = st.columns(2)
-        with bk_col1:
-          st.write('**1. Tải về File sao lưu người dùng (`users.json`):**')
-          users_json_bytes = json.dumps(
-              users_db, ensure_ascii=False, indent=4
-          ).encode('utf-8')
-          st.download_button(
-              label='📥 Tải Về File Sao Lưu users.json',
-              data=users_json_bytes,
-              file_name='users.json',
-              mime='application/json',
-          )
-
-        with bk_col2:
-          st.write('**2. Khôi phục từ File sao lưu máy tính:**')
-          restore_file = st.file_uploader(
-              'Chọn file users.json từ máy tính:',
-              type=['json'],
-              key=f'restore_uploader_{st.session_state.restore_uploader_key}',
-          )
-          if restore_file is not None:
-            try:
-              imported_users = json.load(restore_file)
-              save_users(imported_users)
-              st.session_state.restore_uploader_key += 1
-              st.toast('✅ Đã khôi phục toàn bộ danh sách người dùng!')
-              st.rerun()
-            except Exception as e:
-              st.error(f'❌ File không hợp lệ: {e}')
-
-        st.markdown('---')
-        st.subheader('🎲 PHÂN CÔNG NGẪU NHIÊN CHẤM THI CUỐI KỲ')
-
-        if st.button('⚡ Phân Công Ngẫu Nhiên Tất Cả Bài Thi Cuối Kỳ'):
-          unassigned_count = 0
-          teachers_by_subject = {}
-
-          for u_id, u_info in users_db.items():
-            if u_info.get('role') == 'teacher':
-              subj = u_info.get('subject')
-              teachers_by_subject.setdefault(subj, []).append(u_id)
-
-          for f_name in os.listdir(SUBMIT_FOLDER):
-            if f_name.endswith('.json'):
-              f_path = os.path.join(SUBMIT_FOLDER, f_name)
-              with open(f_path, 'r', encoding='utf-8') as f:
-                s_data = json.load(f)
-
-              if (
-                  s_data.get('exam_type') == 'Cuối kỳ'
-                  and not s_data.get('assigned_teacher')
-              ):
-                subj = s_data.get('subject')
-                available_teachers = teachers_by_subject.get(subj, [])
-                if available_teachers:
-                  assigned_gv = random.choice(available_teachers)
-                  s_data['assigned_teacher'] = assigned_gv
-                  with open(f_path, 'w', encoding='utf-8') as f:
-                    json.dump(s_data, f, ensure_ascii=False, indent=4)
-                  unassigned_count += 1
-
-          st.success(
-              f'✅ Đã phân công thành công {unassigned_count} bài thi Cuối kỳ cho'
-              ' các giáo viên bộ môn!'
-          )
-
-        st.markdown('---')
-
       st.subheader('📋 DANH SÁCH GIÁO VIÊN TRONG HỆ THỐNG')
       teacher_table = []
       for gv_id, gv_info in users_db.items():
@@ -1954,14 +1736,12 @@ if user['role'] in ['teacher', 'admin']:
 
       if teacher_table:
         st.dataframe(teacher_table, use_container_width=True)
-      else:
-        st.info('Chưa có dữ liệu giáo viên.')
 
       st.markdown('---')
-      st.subheader('✏️ CẬP NHẬT CÁC LỚP QUẢN LÝ CHO GIÁO VIÊN')
+      st.subheader('✏️ CẬP NHẬT MÔN HỌC & LỚP QUẢN LÝ CHO GIÁO VIÊN')
 
       editable_teachers = {
-          f"{gv_info.get('name')} ({gv_id}) - Môn: {gv_info.get('subject')}": (
+          f"{gv_info.get('name')} ({gv_id}) - Môn cũ: {gv_info.get('subject')}": (
               gv_id
           )
           for gv_id, gv_info in users_db.items()
@@ -1974,79 +1754,58 @@ if user['role'] in ['teacher', 'admin']:
 
       if editable_teachers:
         selected_gv_label = st.selectbox(
-            'Chọn Giáo viên cần chỉnh sửa lớp quản lý:',
+            'Chọn Giáo viên cần chỉnh sửa:',
             options=list(editable_teachers.keys()),
         )
         target_gv_id = editable_teachers[selected_gv_label]
         target_gv_info = users_db[target_gv_id]
 
-        current_classes_str = ', '.join(
-            target_gv_info.get('managed_classes', [])
-        )
-        new_classes_input = st.text_input(
-            f"Các Lớp Quản Lý Mới cho {target_gv_info.get('name')} (phân cách bằng"
-            ' dấu phẩy):',
-            value=current_classes_str,
-            key=f'edit_classes_in_{target_gv_id}',
-        )
+        col_g1, col_g2 = st.columns(2)
+        with col_g1:
+          if user['role'] == 'admin':
+            all_subjects_list = list(SUBJECT_PREFIXES.keys())
+            curr_subj_idx = (
+                all_subjects_list.index(target_gv_info.get('subject'))
+                if target_gv_info.get('subject') in all_subjects_list
+                else 0
+            )
+            new_subject_selected = st.selectbox(
+                'Môn Học Giảng Dạy Mới:',
+                options=all_subjects_list,
+                index=curr_subj_idx,
+            )
+          else:
+            new_subject_selected = target_gv_info.get('subject')
+            st.text_input(
+                'Môn Học Giảng Dạy:', value=new_subject_selected, disabled=True
+            )
 
-        if st.button('💾 Cập Nhật Lớp Quản Lý', type='primary'):
+        with col_g2:
+          current_classes_str = ', '.join(
+              target_gv_info.get('managed_classes', [])
+          )
+          new_classes_input = st.text_input(
+              'Các Lớp Quản Lý Mới (phân cách bằng dấu phẩy):',
+              value=current_classes_str,
+          )
+
+        if st.button('💾 Cập Nhật Thông Tin Giáo Viên', type='primary'):
           updated_classes = [
               c.strip() for c in new_classes_input.split(',') if c.strip()
           ]
           users_db[target_gv_id]['managed_classes'] = updated_classes
+          users_db[target_gv_id]['subject'] = new_subject_selected
           save_users(users_db)
           st.success(
-              f"✅ Đã cập nhật thành công danh sách lớp quản lý cho"
-              f" {target_gv_info.get('name')}!"
+              f"✅ Đã cập nhật thành công thông tin cho {target_gv_info.get('name')}!"
           )
           st.rerun()
-
-      if user['role'] == 'admin':
-        st.markdown('---')
-        st.subheader('➕ TẠO TÀI KHOẢN GIÁO VIÊN MỚI')
-
-        cg1, cg2 = st.columns(2)
-        with cg1:
-          new_gv_id = st.text_input('Mã Giáo viên:')
-          new_gv_name = st.text_input('Họ tên Giáo viên:')
-          new_gv_subject = st.selectbox(
-              'Môn học giảng dạy:', list(SUBJECT_PREFIXES.keys())
-          )
-        with cg2:
-          new_gv_pass = st.text_input('Mật khẩu:', value='123', key='gv_pass_in')
-          new_gv_is_head = st.checkbox(
-              'Trưởng bộ môn (Có quyền tạo đề Cuối kỳ & Quản lý bộ môn)'
-          )
-          new_gv_classes_str = st.text_input(
-              'Các Lớp Quản Lý:', value='10A1, 10A2'
-          )
-
-        if st.button('➕ Tạo Giáo Viên'):
-          if new_gv_id in users_db:
-            st.error('❌ Mã giáo viên này đã tồn tại!')
-          elif new_gv_id and new_gv_name:
-            classes_list = [
-                c.strip() for c in new_gv_classes_str.split(',') if c.strip()
-            ]
-            users_db[new_gv_id] = {
-                'name': new_gv_name,
-                'password': new_gv_pass,
-                'role': 'teacher',
-                'is_head': new_gv_is_head,
-                'subject': new_gv_subject,
-                'managed_classes': classes_list,
-                'contact': '',
-            }
-            save_users(users_db)
-            st.success(f'✅ Tạo thành công Giáo viên {new_gv_name}!')
-            st.rerun()
 
 
 # ==================== GIAO DIỆN HỌC SINH ====================
 elif user['role'] == 'student':
 
-  # SIDEBAR HỌC SINH (BẢNG ĐIỀU HƯỚNG TỰ ĐỘNG ĐỔI MÀU VÀNG REALTIME)
+  # SIDEBAR HỌC SINH
   with st.sidebar:
     if st.session_state.get('exam_started', False):
       exam = st.session_state.exam_data
@@ -2059,18 +1818,7 @@ elif user['role'] == 'student':
 
       start_time_ts = st.session_state.get('start_time', time.time())
       duration_seconds = exam_info['duration'] * 60
-      end_by_duration_ms = int((start_time_ts + duration_seconds) * 1000)
-
-      end_str = exam_info.get('end_time')
-      if end_str:
-        try:
-          end_dt = datetime.datetime.strptime(end_str, '%Y-%m-%d %H:%M')
-          end_by_schedule_ms = int(end_dt.timestamp() * 1000)
-          final_end_ms = min(end_by_duration_ms, end_by_schedule_ms)
-        except Exception:
-          final_end_ms = end_by_duration_ms
-      else:
-        final_end_ms = end_by_duration_ms
+      final_end_ms = int((start_time_ts + duration_seconds) * 1000)
 
       timer_code = f"""
             <div style="font-family: Arial; text-align: center; background-color: #fff3cd; border: 2px solid #ffeba2; padding: 10px; border-radius: 8px; margin-bottom: 12px;">
@@ -2111,9 +1859,8 @@ elif user['role'] == 'student':
         nav_html = "<div style='display: flex; flex-wrap: wrap; gap: 6px;'>"
         for idx in range(1, len(exam['mcq']) + 1):
           val = st.session_state.get(f'mcq_{idx}')
-          is_ans = val is not None
-          bg_color = '#ffc107' if is_ans else '#6c757d'
-          text_color = 'black' if is_ans else 'white'
+          bg_color = '#ffc107' if val is not None else '#6c757d'
+          text_color = 'black' if val is not None else 'white'
           nav_html += f"""<a href="#q_mcq_{idx}" style="display:inline-block; width:32px; height:32px; line-height:32px; text-align:center; background-color:{bg_color}; color:{text_color}; border-radius:6px; font-weight:bold; text-decoration:none;">{idx}</a>"""
         nav_html += '</div>'
         st.markdown(nav_html, unsafe_allow_html=True)
@@ -2150,46 +1897,7 @@ elif user['role'] == 'student':
       student_subjects = ['Tất cả môn'] + list(SUBJECT_PREFIXES.keys())
       selected_subject = st.radio('Chọn môn học:', student_subjects)
 
-      st.markdown('---')
-      st.markdown('### 📊 TỔNG HỢP KẾT QUẢ THEO MÔN')
-
-      student_class = user.get('class_name', '')
-      summary_list = []
-
-      for subj in SUBJECT_PREFIXES.keys():
-        subj_exams = [
-            v
-            for v in exams_db.values()
-            if v.get('is_active', True)
-            and v.get('subject') == subj
-            and (
-                v.get('target_class') == 'ALL'
-                or v.get('target_class') == student_class
-            )
-        ]
-        tot = len(subj_exams)
-        if tot == 0:
-          continue
-
-        done_cnt = 0
-        score_sum = 0.0
-        for ex in subj_exams:
-          subm = get_student_exam_submission(user['username'], ex.get('code'))
-          if subm:
-            done_cnt += 1
-            score_sum += float(subm.get('total_score', 0.0))
-
-        comp_pct = f'{int(round((done_cnt / tot) * 100))}%'
-        avg_sc = f'{round(score_sum / done_cnt, 2):.2f}' if done_cnt > 0 else '-'
-
-        summary_list.append(
-            {'Môn': subj, 'Điểm TB': avg_sc, '% Hoàn thành': comp_pct}
-        )
-
-      if summary_list:
-        st.dataframe(summary_list, use_container_width=True, hide_index=True)
-
-  # KẾT QUẢ SAU KHI NỘP BÀI
+  # TRANG KẾT QUẢ BÀI THI SAU KHI NỘP
   if st.session_state.submitted_data:
     res = st.session_state.submitted_data
     st.balloons()
@@ -2218,7 +1926,7 @@ elif user['role'] == 'student':
 
     st.stop()
 
-  # CỬA SỔ XÁC NHẬN VÀO THI & TỰ ĐỘNG KHÔI PHỤC BÀI DỞ DÙ OUT RA VÀO LẠI
+  # CỬA SỔ XÁC NHẬN VÀO THI
   if not st.session_state.get('exam_started', False) and st.session_state.get(
       'confirm_exam_id'
   ):
@@ -2227,26 +1935,16 @@ elif user['role'] == 'student':
 
     if exam_info:
       draft = load_student_draft(user['username'], exam_info['code'])
-
       st.markdown('<br><br>', unsafe_allow_html=True)
       col_m1, col_m2, col_m3 = st.columns([1, 2.2, 1])
 
       with col_m2:
         st.markdown("<div class='confirm-modal'>", unsafe_allow_html=True)
-
         if draft:
           st.subheader('📌 PHÁT HIỆN BÀI LÀM CHƯA HOÀN THÀNH')
           st.warning(
-              f"Hệ thống tìm thấy bài làm dở lưu lúc **{draft.get('updated_at')}**."
-              " Toàn bộ đáp án bạn đã làm sẽ được giữ nguyên 100%!"
+              f"Hệ thống tìm thấy bài dở lưu lúc **{draft.get('updated_at')}**."
           )
-          st.write(
-              f"Bài thi: **[{exam_info.get('code')}] {exam_info['title']}**"
-          )
-          st.write(f"- **Môn:** {exam_info.get('subject')}")
-          st.write(f"- **Thời gian làm bài:** {exam_info['duration']} phút")
-
-          st.markdown('<br>', unsafe_allow_html=True)
           col_b1, col_b2, col_b3 = st.columns(3)
           with col_b1:
             if st.button(
@@ -2254,7 +1952,6 @@ elif user['role'] == 'student':
             ):
               restore_exam_from_draft(draft)
               st.rerun()
-
           with col_b2:
             if st.button('🔄 Làm Bài Mới', use_container_width=True):
               delete_student_draft(user['username'], exam_info['code'])
@@ -2295,29 +1992,22 @@ elif user['role'] == 'student':
               st.session_state.current_exam_info = exam_info
               st.session_state.confirm_exam_id = None
               st.rerun()
-
           with col_b3:
             if st.button('❌ Hủy', use_container_width=True):
               st.session_state.confirm_exam_id = None
               st.rerun()
-
         else:
           st.subheader('⚠️ XÁC NHẬN VÀO THI')
           st.write(
-              f"Bạn có chắc chắn muốn bắt đầu làm bài thi:"
-              f" **[{exam_info.get('code')}] {exam_info['title']}**?"
+              f"Bài thi: **[{exam_info.get('code')}] {exam_info['title']}**"
           )
-          st.write(f"- **Môn:** {exam_info.get('subject')}")
-          st.write(f"- **Thời gian làm bài:** {exam_info['duration']} phút")
-
-          st.markdown('<br>', unsafe_allow_html=True)
+          st.write(f"- Thời gian làm bài: **{exam_info['duration']} phút**")
           col_b1, col_b2 = st.columns(2)
           with col_b1:
             if st.button(
                 '🚀 Bắt Đầu Vào Thi', use_container_width=True, type='primary'
             ):
               clear_exam_session_state()
-
               mcq_p, tf_p, es_p = parse_question_bank(
                   os.path.join(BANK_FOLDER, exam_info['bank_file'])
               )
@@ -2353,17 +2043,15 @@ elif user['role'] == 'student':
               st.session_state.current_exam_info = exam_info
               st.session_state.confirm_exam_id = None
               st.rerun()
-
           with col_b2:
             if st.button('❌ Thoát', use_container_width=True):
               st.session_state.confirm_exam_id = None
               st.rerun()
 
         st.markdown('</div>', unsafe_allow_html=True)
-
     st.stop()
 
-  # DANH SÁCH ĐỀ THI BÊN HỌC SINH
+  # DANH SÁCH BÀI THI BÊN HỌC SINH
   if not st.session_state.get('exam_started', False):
     st.title(
         f"📝 DANH SÁCH ĐỀ THI - {selected_subject.upper() if selected_subject != 'Tất cả môn' else 'TẤT CẢ MÔN'}"
@@ -2383,86 +2071,41 @@ elif user['role'] == 'student':
           visible_exams[k] = v
 
     if not visible_exams:
-      st.warning(
-          f'⚠️ Hiện tại chưa có bài thi nào cho môn **{selected_subject}** dành'
-          f' cho lớp {student_class}!'
-      )
+      st.warning(f'⚠️ Hiện tại chưa có bài thi nào dành cho lớp {student_class}!')
       st.stop()
 
-    search_kw = st.text_input(
-        '🔍 Tìm kiếm bài thi theo Mã bài thi hoặc Tên bài thi:', value=''
-    ).strip()
-
-    filtered_exams = {}
-    for k, v in visible_exams.items():
-      kw_lower = search_kw.lower()
-      if (
-          kw_lower in v.get('code', '').lower()
-          or kw_lower in v.get('title', '').lower()
-      ):
-        filtered_exams[k] = v
+    search_kw = st.text_input('🔍 Tìm kiếm bài thi:', value='').strip().lower()
+    filtered_exams = {
+        k: v
+        for k, v in visible_exams.items()
+        if search_kw in v.get('code', '').lower()
+        or search_kw in v.get('title', '').lower()
+    }
 
     if not filtered_exams:
-      st.info('Không tìm thấy bài thi nào phù hợp.')
+      st.info('Không tìm thấy bài thi nào.')
       st.stop()
 
     st.markdown('---')
-    now_dt = datetime.datetime.now()
-
-    def exam_sort_key(ex_id):
-      ex = filtered_exams[ex_id]
-      subm = get_student_exam_submission(user['username'], ex.get('code'))
-      has_done = subm is not None
-
-      end_str = ex.get('end_time')
-      end_dt = (
-          parse_timestamp(end_str) if end_str else datetime.datetime.max
-      )
-      is_expired = now_dt > end_dt if end_str else False
-
-      if not has_done and not is_expired:
-        return (0, end_dt, ex.get('code', ''))
-      elif has_done:
-        return (1, end_dt, ex.get('code', ''))
-      else:
-        return (2, end_dt, ex.get('code', ''))
-
-    sorted_exam_keys = sorted(filtered_exams.keys(), key=exam_sort_key)
-
-    for ex_id in sorted_exam_keys:
-      ex_info = filtered_exams[ex_id]
+    for ex_id, ex_info in filtered_exams.items():
       submission = get_student_exam_submission(
           user['username'], ex_info['code']
       )
-      has_done = submission is not None
       draft = load_student_draft(user['username'], ex_info['code'])
-
-      start_str = ex_info.get('start_time')
-      end_str = ex_info.get('end_time')
-
-      is_not_opened_yet = False
-      is_expired = False
-
-      if start_str and end_str:
-        try:
-          start_dt = parse_timestamp(start_str)
-          end_dt = parse_timestamp(end_str)
-          if now_dt < start_dt:
-            is_not_opened_yet = True
-          elif now_dt > end_dt:
-            is_expired = True
-        except Exception:
-          pass
 
       col_e1, col_e2, col_e3 = st.columns([3.5, 1.2, 1.3])
       with col_e1:
         st.write(
             f"**[{ex_info.get('code','DE')}] {ex_info['title']}** - Môn:"
-            f" {ex_info.get('subject','')} (Lớp: {ex_info.get('target_class','ALL')})"
+            f" {ex_info.get('subject','')}"
         )
-        st.caption(f'⏱️ Hạn mở đề: {start_str} ➔ {end_str}')
+        st.caption(
+            f"⏱️ Hạn mở đề: {ex_info.get('start_time')} ➔"
+            f" {ex_info.get('end_time')}"
+        )
+
       with col_e2:
-        if has_done:
+        if submission:
           st.markdown(
               "<span style='background-color:#d4edda; color:#155724;"
               " padding:4px 8px; border-radius:4px;'>🟢 Đã Làm</span>",
@@ -2471,20 +2114,7 @@ elif user['role'] == 'student':
         elif draft:
           st.markdown(
               "<span style='background-color:#fff3cd; color:#856404;"
-              " padding:4px 8px; border-radius:4px;'>🟡 Đang Làm Dở</span>",
-              unsafe_allow_html=True,
-          )
-        elif is_not_opened_yet:
-          st.markdown(
-              "<span style='background-color:#fff3cd; color:#856404;"
-              " padding:4px 8px; border-radius:4px;'>🔒 Chưa Mở</span>",
-              unsafe_allow_html=True,
-          )
-        elif is_expired:
-          st.markdown(
-              "<span style='background-color:#f8d7da; color:#721c24;"
-              " padding:4px 8px; border-radius:4px;'>⚪ Chưa Làm (Quá"
-              ' Hạn)</span>',
+              " padding:4px 8px; border-radius:4px;'>🟡 Làm Dở</span>",
               unsafe_allow_html=True,
           )
         else:
@@ -2493,24 +2123,11 @@ elif user['role'] == 'student':
               " padding:4px 8px; border-radius:4px;'>⚪ Chưa Làm</span>",
               unsafe_allow_html=True,
           )
+
       with col_e3:
-        if has_done:
-          if ex_info.get('exam_type') == 'Cuối kỳ' and not submission.get(
-              'is_graded'
-          ):
-            st.markdown(
-                "<span style='color:#fd7e14; font-weight:bold;'>⏳ Chờ công"
-                ' bố</span>',
-                unsafe_allow_html=True,
-            )
-          else:
-            tot_sc = submission.get('total_score', 0.0)
-            st.markdown(
-                f"<span style='background-color:#cce5ff; color:#004085;"
-                f" padding:4px 8px; border-radius:4px;'>🏆 {tot_sc}đ</span>",
-                unsafe_allow_html=True,
-            )
-        elif not is_not_opened_yet and not is_expired:
+        if submission:
+          st.markdown(f"🏆 **{submission.get('total_score', 0.0)}đ**")
+        else:
           btn_label = '▶️ Làm Tiếp' if draft else '▶️ Vào Thi'
           if st.button(btn_label, key=f'btn_start_direct_{ex_id}'):
             if draft:
@@ -2519,12 +2136,10 @@ elif user['role'] == 'student':
             else:
               st.session_state.confirm_exam_id = ex_id
               st.rerun()
-
       st.markdown('---')
-
     st.stop()
 
-  # MÀN HÌNH ĐANG LÀM BÀI THI CỦA HỌC SINH (LƯU & PHỦ ĐÁP ÁN CŨ KHÔNG MẤT DỮ LIỆU)
+  # GIAO DIỆN LÀM BÀI THI CỦA HỌC SINH
   exam = st.session_state.exam_data
   exam_info = st.session_state.current_exam_info
   is_short_ans_subj = exam_info.get('subject') in SHORT_ANSWER_SUBJECTS
@@ -2592,7 +2207,6 @@ elif user['role'] == 'student':
               index=None,
               horizontal=True,
           )
-
         user_tf[idx].append(ans)
 
   user_essay = {}
@@ -2639,7 +2253,6 @@ elif user['role'] == 'student':
 
     mcq_score = 0.0
     correct_cnt = 0
-
     mcq_pts = float(exam_info.get('mcq_points', 0.0))
     mcq_unit = mcq_pts / len(exam['mcq']) if exam['mcq'] else 0.0
 
